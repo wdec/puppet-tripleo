@@ -34,7 +34,7 @@
 class tripleo::profile::base::neutron::plugins::ml2 (
   $bootstrap_node    = hiera('bootstrap_nodeid', undef),
   $mechanism_drivers = hiera('neutron::plugins::ml2::mechanism_drivers'),
-  $step              = hiera('step'),
+  $step              = Integer(hiera('step')),
 ) {
   if $::hostname == downcase($bootstrap_node) {
     $sync_db = true
@@ -70,6 +70,28 @@ class tripleo::profile::base::neutron::plugins::ml2 (
 
     if 'ovn' in $mechanism_drivers {
       include ::tripleo::profile::base::neutron::plugins::ml2::ovn
+    }
+
+    if 'fujitsu_cfab' in $mechanism_drivers {
+      include ::neutron::plugins::ml2::fujitsu
+      include ::neutron::plugins::ml2::fujitsu::cfab
+    }
+
+    if 'fujitsu_fossw' in $mechanism_drivers {
+      include ::neutron::plugins::ml2::fujitsu
+      include ::neutron::plugins::ml2::fujitsu::fossw
+    }
+
+    if 'vpp' in $mechanism_drivers {
+      include ::tripleo::profile::base::neutron::plugins::ml2::vpp
+    }
+
+    if 'nuage' in $mechanism_drivers {
+      include ::tripleo::profile::base::neutron::plugins::ml2::nuage
+    }
+
+    if 'cisco_vts' in $mechanism_drivers {
+      include ::tripleo::profile::base::neutron::plugins::ml2::vts
     }
   }
 }
