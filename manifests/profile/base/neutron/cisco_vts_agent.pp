@@ -30,6 +30,7 @@ class tripleo::profile::base::neutron::cisco_vts_agent(
 
   if $step >= 4 {
     #THIS LOOKS INCORRECT. BUT how does one config the fuller ovs.ini file otherwise?
+    # Likely we need manifest for vts
     include ::neutron::agents::ml2::ovs
 
     # Optional since manage_service may be false and neutron server may not be colocated.

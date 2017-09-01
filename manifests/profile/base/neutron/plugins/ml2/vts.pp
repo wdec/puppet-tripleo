@@ -47,7 +47,7 @@ class tripleo::profile::base::neutron::plugins::ml2::vts (
   }
 
     class { '::neutron::plugins::ml2::cisco::vts':
-      vts_url      => "https://${vts_url_ip}:${vts_port}/api/running/openstack"
+      vts_url => "https://${vts_url_ip}:${vts_port}/api/running/openstack"
     }
   }
 }

@@ -20,23 +20,30 @@
 #
 #
 # [*vts_ip*]
-#   (Optional) IP address for VTS Api Service
+#   IP address for VTS Api Service
 #   Defaults to hiera('vts_ip')
 #
 # [*vts_port*]
-#   (Optional) Virtual Machine Manager ID for VTS
+#   Virtual Machine Manager ID for VTS
 #   Defaults to '8888'
 #
+# [*vpfa_hostname*]
+#   (Optional) Hostname to represent the VPFA.
+#   Defaults to the host's hostname if not overriden by user config.
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
 #   for more details.
 #   Defaults to hiera('step')
 #
-class tripleo::profile::base::neutron::plugins::ml2::vts (
+class tripleo::profile::base::cisco_vpfa (
   $vts_url_ip   = hiera('vts::vts_ip'),
   $vts_port     = hiera('vts::vts_port'),
+  $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname'),
+  $vpfa_ip1 = hiera('vtf_underlay_ip1', undef),
+  $vpfa_ip1_mask = hiera('vtf_underlay_ip1_mask', undef),
   $step         = hiera('step'),
+
 ) {
 
   if $step >= 4 {
@@ -46,9 +53,29 @@ class tripleo::profile::base::neutron::plugins::ml2::vts (
     $vts_url_ip = enclose_ipv6($vts_url_ip)
   }
 
+  if $vpfa_hostname == '' {
+    $vpfa_hostname = $::hostname
+  }
+
+  if $vpfa_ip1 == undef {
+    #fail('VPFA IP is empty')
+    #Temporary measure
+    $vpfa_ip = '1.1.1.1'
+  }
+
+  if $vpfa_ip1_mask == undef {
+    #fail('VPFA IP Mask is empty')
+    #Temporary measure
+    $vpfa_ip_mask = '24'
+  }
+
     class { '::cisco_vpfa':
       vts_registration_api      => "https://${vts_url_ip}:${vts_port}/api/running/cisco-vts/vtfs/vtf",
-      vts_address => $vts_url_ip
+      vts_address => $vts_url_ip,
+      vpfa_hostname => $vpfa_hostname,
+      compute_hostname => $::hostname,
+      network_ipv4_address => $vpfa_ip,
+      network_ipv4_mask => $vpfa_ip_mask
     }
   }
 }
