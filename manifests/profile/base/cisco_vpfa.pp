@@ -40,8 +40,8 @@ class tripleo::profile::base::cisco_vpfa (
   $vts_url_ip   = hiera('vts::vts_ip'),
   $vts_port     = hiera('vts::vts_port'),
   $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname'),
-  $vpfa_ip1 = hiera('vtf_underlay_ip1', undef),
-  $vpfa_ip1_mask = hiera('vtf_underlay_ip1_mask', undef),
+  $vpfa_ip1 = hiera('vts::vtf_underlay_ip_v4', undef),
+  $vpfa_ip1_mask = hiera('vts::vtf_underlay_mask_v4', undef),
   $step         = hiera('step'),
 
 ) {
@@ -58,15 +58,11 @@ class tripleo::profile::base::cisco_vpfa (
   }
 
   if $vpfa_ip1 == undef {
-    #fail('VPFA IP is empty')
-    #Temporary measure
-    $vpfa_ip = '1.1.1.1'
+    fail('Cisco VPFA IP address is undefined')
   }
 
   if $vpfa_ip1_mask == undef {
-    #fail('VPFA IP Mask is empty')
-    #Temporary measure
-    $vpfa_ip_mask = '24'
+    fail('Cisco VPFA IP Mask is undefined')
   }
 
     class { '::cisco_vpfa':
@@ -74,8 +70,8 @@ class tripleo::profile::base::cisco_vpfa (
       vts_address => $vts_url_ip,
       vpfa_hostname => $vpfa_hostname,
       compute_hostname => $::hostname,
-      network_ipv4_address => $vpfa_ip,
-      network_ipv4_mask => $vpfa_ip_mask
+      network_ipv4_address => $vpfa_ip1,
+      network_ipv4_mask => $vpfa_ip1_mask
     }
   }
 }
