@@ -42,6 +42,7 @@ class tripleo::profile::base::cisco_vpfa (
   $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname'),
   $vpfa_ip1 = hiera('vts::vtf_underlay_ip_v4', undef),
   $vpfa_ip1_mask = hiera('vts::vtf_underlay_mask_v4', undef),
+
   $step         = hiera('step'),
 
 ) {
@@ -65,13 +66,28 @@ class tripleo::profile::base::cisco_vpfa (
     fail('Cisco VPFA IP Mask is undefined')
   }
 
+  #Figure out the underlay interface config source and bonding
+  if !hiera('vts::vpfa_init') {
+    # OSPD native module is used to config VPP. Need to extract the underlay interfaces from
+    # os-net-config
+    $underlay_interface = hiera('cisco_vpfa::underlay_interface')
+    $bond_if_list = hiera('cisco_vpfa::bond_if_list')
+
+  }
+  else {
+    $underlay_interface = hiera('vts::underlay_interface', undef)
+    $bond_if_list = hiera('vts::bond_if_list', undef)
+  }
+
     class { '::cisco_vpfa':
       vts_registration_api      => "https://${vts_url_ip}:${vts_port}/api/running/cisco-vts/vtfs/vtf",
       vts_address => $vts_url_ip,
       vpfa_hostname => $vpfa_hostname,
       compute_hostname => $::hostname,
       network_ipv4_address => $vpfa_ip1,
-      network_ipv4_mask => $vpfa_ip1_mask
+      network_ipv4_mask => $vpfa_ip1_mask,
+      underlay_interface => $underlay_interface,
+      bond_if_list => $bond_if_list
     }
   }
 }
