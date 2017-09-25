@@ -83,7 +83,6 @@ class tripleo::profile::base::cisco_vpfa (
       vts_registration_api      => "https://${vts_url_ip}:${vts_port}/api/running/cisco-vts/vtfs/vtf",
       vts_address => $vts_url_ip,
       vpfa_hostname => $vpfa_hostname,
-      compute_hostname => $::hostname,
       network_ipv4_address => $vpfa_ip1,
       network_ipv4_mask => $vpfa_ip1_mask,
       underlay_interface => $underlay_interface,
