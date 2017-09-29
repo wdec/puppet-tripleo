@@ -14,7 +14,7 @@
 #
 # == Class: tripleo::profile::base::neutron::plugins::ml2::vts
 #
-# VTS Controller ML2 Neutron profile for TripleO
+# Cisco VTS Controller Neutron ML2 plugin profile for TripleO
 #
 # === Parameters
 #
@@ -26,7 +26,6 @@
 # [*vts_port*]
 #   (Optional) Virtual Machine Manager ID for VTS
 #   Defaults to '8888'
-#
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates

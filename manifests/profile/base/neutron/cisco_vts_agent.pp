@@ -12,11 +12,19 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 #
-# == Class: tripleo::profile::base::neutron::ovs
+# == Class: tripleo::profile::base::neutron::cisco_vts_agent
 #
 # Neutron Cisco VTS Agent profile for tripleo
 #
 # === Parameters
+#
+# [*vts_ip*]
+#   (Optional) IP address for VTS Api Service
+#   Defaults to hiera('vts_ip')
+#
+# [*vts_port*]
+#   (Optional) Virtual Machine Manager ID for VTS
+#   Defaults to '8888'
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
@@ -24,17 +32,25 @@
 #   Defaults to hiera('step')
 #
 class tripleo::profile::base::neutron::cisco_vts_agent(
+  $vts_url_ip   = hiera('vts::vts_ip'),
+  $vts_port     = hiera('vts::vts_port'),
   $step           = hiera('step'),
 ) {
   include ::tripleo::profile::base::neutron
 
   if $step >= 4 {
-    #THIS LOOKS INCORRECT. BUT how does one config the fuller ovs.ini file otherwise?
-    # Likely we need manifest for vts
-    include ::neutron::agents::ml2::ovs
+    if ! $vts_url_ip { fail('VTS IP is Empty') }
+
+    if is_ipv6_address($vts_url_ip) {
+      $vts_url_ip = enclose_ipv6($vts_url_ip)
+    }
+
+    class { '::neutron::agents::ml2::cisco_vts_agent':
+      vts_url => "https://${vts_url_ip}:${vts_port}/api/running/openstack"
+    }
 
     # Optional since manage_service may be false and neutron server may not be colocated.
-    Service<| title == 'neutron-server' |> -> Service<| title == 'neutron-vts-agent-service' |>
+    #Service<| title == 'neutron-server' |> -> Service<| title == 'neutron-vts-agent' |>
   }
 
 }
