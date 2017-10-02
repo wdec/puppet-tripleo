@@ -39,7 +39,7 @@
 class tripleo::profile::base::cisco_vpfa (
   $vts_url_ip   = hiera('vts::vts_ip'),
   $vts_port     = hiera('vts::vts_port'),
-  $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname', ''),
+  $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname', $::hostname),
   $vpfa_ip1 = hiera('vts::vtf_underlay_ip_v4', undef),
   $vpfa_ip1_mask = hiera('vts::vtf_underlay_mask_v4', undef),
 
@@ -51,12 +51,12 @@ class tripleo::profile::base::cisco_vpfa (
     if ! $vts_url_ip { fail('VTS IP is Empty') }
 
   if is_ipv6_address($vts_url_ip) {
-    $vts_url_ip = enclose_ipv6($vts_url_ip)
+    $vts_url_ip_out = enclose_ipv6($vts_url_ip)
+  }
+  else {
+    $vts_url_ip_out = $vts_url_ip
   }
 
-  if $vpfa_hostname == '' {
-    $vpfa_hostname = $::hostname
-  }
 
   if $vpfa_ip1 == undef {
     fail('Cisco VPFA IP address is undefined')
@@ -80,8 +80,8 @@ class tripleo::profile::base::cisco_vpfa (
   }
 
     class { '::cisco_vpfa':
-      vts_registration_api      => "https://${vts_url_ip}:${vts_port}/api/running/cisco-vts/vtfs/vtf",
-      vts_address => $vts_url_ip,
+      vts_registration_api      => "https://${vts_url_ip_out}:${vts_port}/api/running/cisco-vts/vtfs/vtf",
+      vts_address => $vts_url_ip_out,
       vpfa_hostname => $vpfa_hostname,
       network_ipv4_address => $vpfa_ip1,
       network_ipv4_mask => $vpfa_ip1_mask,
