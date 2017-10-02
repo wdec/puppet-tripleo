@@ -39,7 +39,7 @@
 class tripleo::profile::base::cisco_vpfa (
   $vts_url_ip   = hiera('vts::vts_ip'),
   $vts_port     = hiera('vts::vts_port'),
-  $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname'),
+  $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname', ''),
   $vpfa_ip1 = hiera('vts::vtf_underlay_ip_v4', undef),
   $vpfa_ip1_mask = hiera('vts::vtf_underlay_mask_v4', undef),
 
