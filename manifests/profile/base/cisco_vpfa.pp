@@ -31,6 +31,12 @@
 #   (Optional) Hostname to represent the VPFA.
 #   Defaults to the host's hostname if not overriden by user config.
 #
+# [*vpfa_ip1*]
+#   IP address for the VPFA. Must be unique per VPFA
+#
+# [*vpfa_ip1_mask*]
+#   VPFA's IP subnet LENGTH. Eg 24
+#
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
 #   for more details.
@@ -40,11 +46,9 @@ class tripleo::profile::base::cisco_vpfa (
   $vts_url_ip   = hiera('vts::vts_ip'),
   $vts_port     = hiera('vts::vts_port'),
   $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname', $::hostname),
-  $vpfa_ip1 = hiera('vts::vtf_underlay_ip_v4', undef),
-  $vpfa_ip1_mask = hiera('vts::vtf_underlay_mask_v4', undef),
-
+  $vpfa_ip1 = hiera('cisco_vpfa::vtf_underlay_ip_v4', undef),
+  $vpfa_ip1_mask = hiera('cisco_vpfa::vtf_underlay_mask_v4', undef),
   $step         = hiera('step'),
-
 ) {
 
   if $step >= 4 {
@@ -57,13 +61,12 @@ class tripleo::profile::base::cisco_vpfa (
     $vts_url_ip_out = $vts_url_ip
   }
 
-
   if $vpfa_ip1 == undef {
-    fail('Cisco VPFA IP address is undefined')
+    fail('Per Node Cisco VPFA IP address is undefined!')
   }
 
   if $vpfa_ip1_mask == undef {
-    fail('Cisco VPFA IP Mask is undefined')
+    fail('Per Node Cisco VPFA IP Mask is undefined!')
   }
 
   #Figure out the underlay interface config source and bonding
@@ -75,7 +78,7 @@ class tripleo::profile::base::cisco_vpfa (
 
   }
   else {
-    $underlay_interface = hiera('vts::underlay_interface', undef)
+    $underlay_interface = hiera('vts::underlay_interface')
     $bond_if_list = hiera('vts::bond_if_list', undef)
   }
 
