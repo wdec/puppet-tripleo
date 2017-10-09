@@ -34,7 +34,7 @@
 #
 class tripleo::profile::base::neutron::plugins::ml2::vts (
   $vts_url_ip   = hiera('vts::vts_ip'),
-  $vts_port     = hiera('vts::vts_port'),
+  $vts_port     = hiera('vts::vts_port', 8888),
   $step         = hiera('step'),
 ) {
 
