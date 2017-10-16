@@ -53,7 +53,7 @@ class tripleo::profile::base::neutron::cisco_vts_agent(
     }
 
     # Optional since manage_service may be false and neutron server may not be colocated.
-    #Service<| title == 'neutron-server' |> -> Service<| title == 'neutron-vts-agent' |>
+    Service<| title == 'neutron-server' |> -> Service<| title == 'neutron-vts-agent' |>
   }
 
 }
