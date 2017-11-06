@@ -39,14 +39,8 @@ class tripleo::profile::base::neutron::plugins::ml2::vts (
 ) {
 
   if $step >= 4 {
-    if ! $vts_url_ip { fail('VTS IP is Empty') }
 
-  if is_ipv6_address($vts_url_ip) {
-    $vts_url_ip_out = enclose_ipv6($vts_url_ip)
-  }
-  else {
-    $vts_url_ip_out = $vts_url_ip
-  }
+    $vts_url_ip_out = normalize_ip_for_uri($vts_url_ip)
 
     class { '::neutron::plugins::ml2::cisco::vts':
       vts_url => "https://${vts_url_ip_out}:${vts_port}/api/running/openstack"
