@@ -1,4 +1,4 @@
-# Copyright 2016 Red Hat, Inc.
+# Copyright 2017 Nuage Networks from Nokia Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -12,26 +12,20 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 #
-# == Class: tripleo::profile::base::neutron::sriov
+# == Class: tripleo::profile::base::neutron::plugins::ml2::nuage
 #
-# Neutron SR-IOV nic Agent profile for tripleo
-#
-# === Parameters
+# Nuage Neutron ML2 profile for tripleo
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
 #   for more details.
 #   Defaults to hiera('step')
 #
-
-class tripleo::profile::base::neutron::sriov(
-  $step               = hiera('step')
+class tripleo::profile::base::neutron::plugins::ml2::nuage (
+  $step              = hiera('step'),
 ) {
 
-  include ::tripleo::profile::base::neutron
-
   if $step >= 4 {
-    include ::neutron::agents::ml2::sriov
-    include ::tripleo::host::sriov
+    include ::neutron::plugins::ml2::nuage
   }
 }
