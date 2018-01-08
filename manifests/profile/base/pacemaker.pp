@@ -27,16 +27,70 @@
 #   (Optional) The number of times pcs commands should be retried.
 #   Defaults to hiera('pcs_tries', 20)
 #
+# [*remote_short_node_names*]
+#   (Optional) List of short node names for pacemaker remote nodes
+#   Defaults to hiera('pacemaker_remote_short_node_names', [])
+#
+# [*remote_node_ips*]
+#   (Optional) List of node ips for pacemaker remote nodes
+#   Defaults to hiera('pacemaker_remote_node_ips', [])
+#
+# [*remote_authkey*]
+#   (Optional) Authkey for pacemaker remote nodes
+#   Defaults to undef
+#
+# [*remote_reconnect_interval*]
+#   (Optional) Reconnect interval for the remote
+#   Defaults to hiera('pacemaker_remote_reconnect_interval', 60)
+#
+# [*remote_monitor_interval*]
+#   (Optional) Monitor interval for the remote
+#   Defaults to hiera('pacemaker_monitor_reconnect_interval', 20)
+#
+# [*remote_tries*]
+#   (Optional) Number of tries for the remote resource creation
+#   Defaults to hiera('pacemaker_remote_tries', 5)
+#
+# [*remote_try_sleep*]
+#   (Optional) Number of seconds to sleep between remote creation tries
+#   Defaults to hiera('pacemaker_remote_try_sleep', 60)
+#
+# [*cluster_recheck_interval*]
+#   (Optional) Set the cluster-wide cluster-recheck-interval property
+#   If the hiera key does not exist or if it is set to undef, the property
+#   won't be changed from its default value when there are no pacemaker_remote
+#   nodes. In presence of pacemaker_remote nodes and an undef value it will
+#   be set to 60s.
+#   Defaults to hiera('pacemaker_cluster_recheck_interval', undef)
+#
+# [*encryption*]
+#   (Optional) Whether or not to enable encryption of the pacemaker traffic
+#   Defaults to true
+#
 class tripleo::profile::base::pacemaker (
-  $step      = hiera('step'),
-  $pcs_tries = hiera('pcs_tries', 20),
+  $step                      = Integer(hiera('step')),
+  $pcs_tries                 = hiera('pcs_tries', 20),
+  $remote_short_node_names   = hiera('pacemaker_remote_short_node_names', []),
+  $remote_node_ips           = hiera('pacemaker_remote_node_ips', []),
+  $remote_authkey            = undef,
+  $remote_reconnect_interval = hiera('pacemaker_remote_reconnect_interval', 60),
+  $remote_monitor_interval   = hiera('pacemaker_remote_monitor_interval', 20),
+  $remote_tries              = hiera('pacemaker_remote_tries', 5),
+  $remote_try_sleep          = hiera('pacemaker_remote_try_sleep', 60),
+  $cluster_recheck_interval  = hiera('pacemaker_cluster_recheck_interval', undef),
+  $encryption                = true,
 ) {
+
+  if count($remote_short_node_names) != count($remote_node_ips) {
+    fail("Count of ${remote_short_node_names} is not equal to count of ${remote_node_ips}")
+  }
+
   Pcmk_resource <| |> {
     tries     => 10,
     try_sleep => 3,
   }
 
-  if $::hostname == downcase(hiera('bootstrap_nodeid')) {
+  if $::hostname == downcase(hiera('pacemaker_short_bootstrap_node_name')) {
     $pacemaker_master = true
   } else {
     $pacemaker_master = false
@@ -45,24 +99,39 @@ class tripleo::profile::base::pacemaker (
   $enable_fencing = str2bool(hiera('enable_fencing', false)) and $step >= 5
 
   if $step >= 1 {
-    $pacemaker_cluster_members = downcase(regsubst(hiera('controller_node_names'), ',', ' ', 'G'))
+    $pacemaker_short_node_names = join(hiera('pacemaker_short_node_names'), ',')
+    $pacemaker_cluster_members = downcase(regsubst($pacemaker_short_node_names, ',', ' ', 'G'))
     $corosync_ipv6 = str2bool(hiera('corosync_ipv6', false))
     if $corosync_ipv6 {
-      $cluster_setup_extras = { '--token' => hiera('corosync_token_timeout', 1000), '--ipv6' => '' }
+      $cluster_setup_extras_pre = {
+        '--token' => hiera('corosync_token_timeout', 1000),
+        '--ipv6' => ''
+      }
     } else {
-      $cluster_setup_extras = { '--token' => hiera('corosync_token_timeout', 1000) }
+      $cluster_setup_extras_pre = {
+        '--token' => hiera('corosync_token_timeout', 1000)
+      }
+    }
+
+    if $encryption {
+      $cluster_setup_extras = merge($cluster_setup_extras_pre, {'--encryption' => '1'})
+    } else {
+      $cluster_setup_extras = $cluster_setup_extras_pre
     }
     class { '::pacemaker':
       hacluster_pwd => hiera('hacluster_pwd'),
-    } ->
-    class { '::pacemaker::corosync':
+    }
+    -> class { '::pacemaker::corosync':
       cluster_members      => $pacemaker_cluster_members,
       setup_cluster        => $pacemaker_master,
       cluster_setup_extras => $cluster_setup_extras,
+      remote_authkey       => $remote_authkey,
     }
-    class { '::pacemaker::stonith':
-      disable => !$enable_fencing,
-      tries   => $pcs_tries,
+    if $pacemaker_master {
+      class { '::pacemaker::stonith':
+        disable => !$enable_fencing,
+        tries   => $pcs_tries,
+      }
     }
     if $enable_fencing {
       include ::tripleo::fencing
@@ -72,13 +141,45 @@ class tripleo::profile::base::pacemaker (
       Pcmk_constraint<||> -> Class['tripleo::fencing']
       Exec <| tag == 'pacemaker_constraint' |> -> Class['tripleo::fencing']
       # enable stonith after all fencing devices have been created
-      Class['tripleo::fencing'] -> Class['pacemaker::stonith']
+      Class['tripleo::fencing'] -> Pcmk_property<|title == 'Enable STONITH'|>
+    }
+    # We have pacemaker remote nodes configured so let's add them as resources
+    # We do this during step 1 right after wait-for-settle, because during step 2
+    # resources might already be created on pacemaker remote nodes and we need
+    # a guarantee that remote nodes are already up
+    if $pacemaker_master and count($remote_short_node_names) > 0 {
+      # Creates a { "node" => "ip_address", ...} hash
+      $remotes_hash = hash(zip($remote_short_node_names, $remote_node_ips))
+      pacemaker::resource::remote { $remote_short_node_names:
+        remote_address     => $remotes_hash[$title],
+        reconnect_interval => $remote_reconnect_interval,
+        op_params          => "monitor interval=${remote_monitor_interval}",
+        verify_on_create   => true,
+        tries              => $remote_tries,
+        try_sleep          => $remote_try_sleep,
+      }
     }
   }
 
   if $step >= 2 {
     if $pacemaker_master {
       include ::pacemaker::resource_defaults
+      # When we have a non-zero number of pacemaker remote nodes we
+      # want to set the cluster-recheck-interval property to something
+      # lower (unless the operator has explicitely set a value)
+      if count($remote_short_node_names) > 0 and $cluster_recheck_interval == undef {
+        pacemaker::property{ 'cluster-recheck-interval-property':
+          property => 'cluster-recheck-interval',
+          value    => '60s',
+          tries    => $pcs_tries,
+        }
+      } elsif $cluster_recheck_interval != undef {
+        pacemaker::property{ 'cluster-recheck-interval-property':
+          property => 'cluster-recheck-interval',
+          value    => $cluster_recheck_interval,
+          tries    => $pcs_tries,
+        }
+      }
     }
   }
 

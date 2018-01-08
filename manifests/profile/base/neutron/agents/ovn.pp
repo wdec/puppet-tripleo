@@ -17,7 +17,12 @@
 # OVN Neutron agent profile for tripleo
 #
 # [*ovn_db_host*]
-#   The IP-Address/Hostname where OVN DBs are deployed
+#   (Optional) The IP-Address where OVN DBs are listening.
+#   Defaults to hiera('ovn_dbs_vip')
+#
+# [*ovn_sbdb_port*]
+#   (Optional) Port number on which southbound database is listening
+#   Defaults to hiera('ovn::southbound::port')
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
@@ -25,14 +30,13 @@
 #   Defaults to hiera('step')
 #
 class tripleo::profile::base::neutron::agents::ovn (
-  $ovn_db_host,
-  $step = hiera('step')
+  $ovn_db_host    = hiera('ovn_dbs_vip'),
+  $ovn_sbdb_port  = hiera('ovn::southbound::port'),
+  $step           = Integer(hiera('step'))
 ) {
   if $step >= 4 {
-    $ovn_sbdb_port = hiera('ovn::southbound::port')
     class { '::ovn::controller':
       ovn_remote     => "tcp:${ovn_db_host}:${ovn_sbdb_port}",
-      ovn_encap_type => hiera('ovn::southboud::encap_type')
     }
   }
 }

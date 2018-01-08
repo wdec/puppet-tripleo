@@ -43,7 +43,7 @@ class tripleo::glance::nfs_mount (
   $options               = 'intr,context=system_u:object_r:glance_var_lib_t:s0',
   $edit_fstab            = true,
   $fstab_fstype          = 'nfs4',
-  $fstab_prepend_options = 'bg'
+  $fstab_prepend_options = '_netdev,bg'
 ) {
 
   $images_dir = '/var/lib/glance/images'
@@ -62,8 +62,8 @@ class tripleo::glance::nfs_mount (
 
   file { $images_dir:
     ensure => directory,
-  } ->
-  exec { 'NFS mount for glance file backend':
+  }
+  -> exec { 'NFS mount for glance file backend':
     path    => ['/usr/sbin', '/usr/bin'],
     command => "mount -t nfs '${share}' '${images_dir}' ${options_part}",
     unless  => "mount | grep ' ${images_dir} '",

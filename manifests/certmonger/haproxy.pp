@@ -32,47 +32,108 @@
 #   The hostname that certmonger will use as the common name for the
 #   certificate.
 #
-# [*postsave_cmd*]
-#   The post-save-command that certmonger will use once it renews the
-#   certificate.
+# [*certmonger_ca*]
+#   (Optional) The CA that certmonger will use to generate the certificates.
+#   Defaults to hiera('certmonger_ca', 'local').
+#
+# [*dnsnames*]
+#   (Optional) The DNS names that will be added for the SubjectAltNames entry
+#   in the certificate. If left unset, the value will be set to the $hostname.
+#   Defaults to undef
 #
 # [*principal*]
 #   The haproxy service principal that is set for HAProxy in kerberos.
+#
+# [*postsave_cmd*]
+#   The post-save-command that certmonger will use once it renews the
+#   certificate.
 #
 define tripleo::certmonger::haproxy (
   $service_pem,
   $service_certificate,
   $service_key,
   $hostname,
-  $postsave_cmd,
-  $principal = undef,
+  $certmonger_ca = hiera('certmonger_ca', 'local'),
+  $dnsnames      = undef,
+  $principal     = undef,
+  $postsave_cmd  = undef,
 ){
+    include ::certmonger
     include ::haproxy::params
+    # This is only needed for certmonger's local CA. For any other CA this
+    # operation (trusting the CA) should be done by the deployer.
+    if $certmonger_ca == 'local' {
+      class { '::tripleo::certmonger::ca::local':
+        notify => Class['::tripleo::haproxy']
+      }
+    }
+
+    if $dnsnames {
+      $dnsnames_real = $dnsnames
+    } else {
+      $dnsnames_real = $hostname
+    }
+
+    if $certmonger_ca == 'local' {
+      $ca_fragment = $ca_pem
+    } else {
+      $ca_fragment = ''
+    }
+
+    $concat_pem = "cat ${service_certificate} ${ca_fragment} ${service_key} > ${service_pem}"
+    if $postsave_cmd {
+      $postsave_cmd_real = "${concat_pem} && ${postsave_cmd}"
+    } else {
+      $reload_haproxy_cmd = 'if systemctl -q is-active haproxy; then systemctl reload haproxy; else true; fi'
+      $postsave_cmd_real = "${concat_pem} && ${reload_haproxy_cmd}"
+    }
+
     certmonger_certificate { "${title}-cert":
+      ensure       => 'present',
+      ca           => $certmonger_ca,
       hostname     => $hostname,
-      dnsname      => $hostname,
+      dnsname      => $dnsnames_real,
       certfile     => $service_certificate,
       keyfile      => $service_key,
-      postsave_cmd => $postsave_cmd,
+      postsave_cmd => $postsave_cmd_real,
       principal    => $principal,
+      wait         => true,
+      tag          => 'haproxy-cert',
+      require      => Class['::certmonger'],
     }
     concat { $service_pem :
-      ensure  => present,
-      mode    => '0640',
-      owner   => 'haproxy',
-      group   => 'haproxy',
-      require => Package[$::haproxy::params::package_name],
+      ensure => present,
+      mode   => '0640',
+      owner  => 'haproxy',
+      group  => 'haproxy',
+      tag    => 'haproxy-cert',
     }
+    Package<| name == $::haproxy::params::package_name |> -> Concat[$service_pem]
+
     concat::fragment { "${title}-cert-fragment":
       target  => $service_pem,
       source  => $service_certificate,
       order   => '01',
+      tag     => 'haproxy-cert',
       require => Certmonger_certificate["${title}-cert"],
     }
+
+    if $certmonger_ca == 'local' {
+      $ca_pem = getparam(Class['tripleo::certmonger::ca::local'], 'ca_pem')
+      concat::fragment { "${title}-ca-fragment":
+        target  => $service_pem,
+        source  => $ca_pem,
+        order   => '10',
+        tag     => 'haproxy-cert',
+        require => Class['tripleo::certmonger::ca::local'],
+      }
+    }
+
     concat::fragment { "${title}-key-fragment":
       target  => $service_pem,
       source  => $service_key,
-      order   => 10,
+      order   => 20,
+      tag     => 'haproxy-cert',
       require => Certmonger_certificate["${title}-cert"],
     }
 }

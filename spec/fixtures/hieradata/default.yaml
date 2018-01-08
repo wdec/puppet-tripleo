@@ -1,10 +1,52 @@
+---
 my_hash:
   network: '127.0.0.1'
 not_hash: string
-horizon::secret_key: 'secrete'
+# aodh profile required hieradata
+aodh::rabbit_password: 'password'
+aodh_redis_password: 'password'
+redis_vip: '127.0.0.1'
+redis::bind: '10.0.0.1'
+aodh::auth::auth_password: 'password'
+aodh::db::mysql::password: 'password'
+aodh::keystone::authtoken::password: 'password'
+# babican profile required hieradata
+barbican::api::rabbit_password: 'password'
+barbican::db::mysql::password: 'password'
+barbican::keystone::authtoken::password: 'password'
+# ceilometer related items
+ceilometer::rabbit_password: 'password'
+ceilometer::keystone::authtoken::password: 'password'
+# ceph related items
+ceph::profile::params::mon_key: 'password'
+# NOTE(gfidente): we want to use keystone v3 API for RGW so the following are
+# needed to comply with the if condition:
+# https://github.com/openstack/puppet-ceph/blob/master/manifests/rgw/keystone.pp#L111
+ceph::profile::params::rgw_keystone_admin_domain: 'keystone_domain'
+ceph::profile::params::rgw_keystone_admin_project: 'keystone_project'
+ceph::profile::params::rgw_keystone_admin_user: 'keystone_admin_user'
+ceph::profile::params::rgw_keystone_admin_password: 'keystone_admin_password'
+# cinder related items
+cinder::rabbit_password: 'password'
+cinder::keystone::authtoken::password: 'password'
+# gnocchi related items
+gnocchi::keystone::authtoken::password: 'password'
+gnocchi::storage::ceph::ceph_username: 'gnocchi'
+gnocchi::storage::ceph::ceph_secret: 'password'
+# haproxy related items
+mysql_enabled: true
+controller_node_ips: '10.1.0.1,10.1.0.2'
+# nova related items
+nova::rabbit_password: 'password'
+nova::keystone::authtoken::password: 'password'
+nova::network::neutron::neutron_password: 'password'
 # memcache related items
 memcached_node_ips_v6:
  - '::1'
 memcached_node_ips:
  - '127.0.0.1'
-service_names: ['sshd']
+# octavia related items
+octavia::rabbit_password: 'password'
+horizon::secret_key: 'secrete'
+#Neutron related
+neutron::rabbit_password: 'password'

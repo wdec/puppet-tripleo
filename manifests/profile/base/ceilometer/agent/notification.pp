@@ -24,9 +24,10 @@
 #   Defaults to hiera('step')
 #
 class tripleo::profile::base::ceilometer::agent::notification (
-  $step = hiera('step'),
+  $step = Integer(hiera('step')),
 ) {
   include ::tripleo::profile::base::ceilometer
+  include ::tripleo::profile::base::ceilometer::upgrade
 
   if $step >= 4 {
     include ::ceilometer::agent::auth

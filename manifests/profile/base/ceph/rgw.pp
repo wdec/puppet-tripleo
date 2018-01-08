@@ -29,6 +29,10 @@
 # [*keystone_admin_token*]
 #   The keystone admin token
 #
+# [*rgw_keystone_version*] The api version for keystone.
+#   Possible values 'v2.0', 'v3'
+#   Optional. Default is 'v2.0'
+#
 # [*keystone_url*]
 #   The internal or admin url for keystone
 #
@@ -44,9 +48,10 @@ class tripleo::profile::base::ceph::rgw (
   $keystone_admin_token,
   $keystone_url,
   $rgw_key,
-  $civetweb_bind_ip   = '127.0.0.1',
-  $civetweb_bind_port = '8080',
-  $step               = hiera('step'),
+  $civetweb_bind_ip            = '127.0.0.1',
+  $civetweb_bind_port          = '8080',
+  $rgw_keystone_version        = 'v2.0',
+  $step                        = Integer(hiera('step')),
 ) {
 
   include ::tripleo::profile::base::ceph
@@ -55,10 +60,11 @@ class tripleo::profile::base::ceph::rgw (
     $rgw_name = hiera('ceph::profile::params::rgw_name', 'radosgw.gateway')
     $civetweb_bind_ip_real = normalize_ip_for_uri($civetweb_bind_ip)
     include ::ceph::params
-    include ::ceph::profile::base
+    include ::ceph::profile::client
     ceph::rgw { $rgw_name:
       frontend_type => 'civetweb',
-      rgw_frontends => "civetweb port=${civetweb_bind_ip_real}:${civetweb_bind_port}"
+      rgw_frontends => "civetweb port=${civetweb_bind_ip_real}:${civetweb_bind_port}",
+      user          => 'ceph',
     }
     ceph::key { "client.${rgw_name}":
       secret  => $rgw_key,
@@ -69,11 +75,24 @@ class tripleo::profile::base::ceph::rgw (
   }
 
   if $step >= 4 {
-    ceph::rgw::keystone { $rgw_name:
-      rgw_keystone_accepted_roles => ['admin', '_member_', 'Member'],
-      use_pki                     => false,
-      rgw_keystone_admin_token    => $keystone_admin_token,
-      rgw_keystone_url            => $keystone_url,
+    if $rgw_keystone_version == 'v2.0' {
+      ceph::rgw::keystone { $rgw_name:
+        rgw_keystone_accepted_roles => ['admin', '_member_', 'Member'],
+        use_pki                     => false,
+        rgw_keystone_admin_token    => $keystone_admin_token,
+        rgw_keystone_url            => $keystone_url,
+        user                        => 'ceph',
+      }
+    }
+    else
+    {
+      ceph::rgw::keystone { $rgw_name:
+        rgw_keystone_accepted_roles => ['admin', '_member_', 'Member'],
+        use_pki                     => false,
+        rgw_keystone_url            => $keystone_url,
+        rgw_keystone_version        => $rgw_keystone_version,
+        user                        => 'ceph',
+      }
     }
   }
 }

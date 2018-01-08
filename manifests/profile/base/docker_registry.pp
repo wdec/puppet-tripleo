@@ -19,29 +19,40 @@
 # === Parameters:
 #
 # [*registry_host*]
-#  (String) IP address on which the Docker registry is listening on
+#  (String) IP address or hostname the Docker registry binds to
 #  Defaults to hiera('controller_host')
 #
 # [*registry_port*]
 #  (Integer) The port on which the Docker registry is listening on
 #  Defaults to 8787
 #
-# [*controller_admin_vip*]
-#  (String) VIP of the host
-#  Defaults to hiera('controller_admin_vip')
+# [*registry_admin_host*]
+#  (String) IP address or hostname the Docker registry binds to in the admin
+#  network
+#  Defaults to hiera('controller_admin_host')
+#
+# [*enable_container_images_build*]
+#  (Optional) Whether to install tools to build docker container images
+#  Defaults to hiera('enable_container_images_build', true)
 #
 class tripleo::profile::base::docker_registry (
-  $registry_host        = hiera('controller_host'),
-  $registry_port        = 8787,
-  $controller_admin_vip = hiera('controller_admin_vip'),
+  $registry_host                 = hiera('controller_host'),
+  $registry_port                 = 8787,
+  $registry_admin_host           = hiera('controller_admin_host'),
+  $enable_container_images_build = hiera('enable_container_images_build', true),
 ) {
+
+  include ::tripleo::profile::base::docker
+
   # We want a v2 registry
   package{'docker-registry':
     ensure        => absent,
     allow_virtual => false,
   }
   package{'docker-distribution': }
-  package{'docker': }
+  if str2bool($enable_container_images_build) {
+    package{'openstack-kolla': }
+  }
   file { '/etc/docker-distribution/registry/config.yml' :
     ensure  => file,
     content => template('tripleo/docker_distribution/registry_config.yml.erb'),
@@ -56,7 +67,7 @@ class tripleo::profile::base::docker_registry (
     line    => join ([
       'INSECURE_REGISTRY="',
       '--insecure-registry ', $registry_host, ':', $registry_port, ' ',
-      '--insecure-registry ', $controller_admin_vip, ':', $registry_port, '"']),
+      '--insecure-registry ', $registry_admin_host, ':', $registry_port, '"']),
     match   => 'INSECURE_REGISTRY=',
     require => Package['docker'],
     notify  => Service['docker'],
@@ -65,10 +76,5 @@ class tripleo::profile::base::docker_registry (
     ensure  => running,
     enable  => true,
     require => Package['docker-distribution'],
-  }
-  service { 'docker':
-    ensure  => running,
-    enable  => true,
-    require => Package['docker'],
   }
 }

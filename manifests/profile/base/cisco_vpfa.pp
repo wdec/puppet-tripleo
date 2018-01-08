@@ -48,7 +48,7 @@ class tripleo::profile::base::cisco_vpfa (
   $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname', $::hostname),
   $vpfa_ip1 = hiera('cisco_vpfa::vtf_underlay_ip_v4', undef),
   $vpfa_ip1_mask = hiera('cisco_vpfa::vtf_underlay_mask_v4', undef),
-  $step         = hiera('step'),
+  $step         = Integer(hiera('step')),
 ) {
 
   if $step >= 4 {

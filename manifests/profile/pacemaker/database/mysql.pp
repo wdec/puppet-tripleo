@@ -18,75 +18,143 @@
 #
 # === Parameters
 #
+# [*bootstrap_node*]
+#   (Optional) The hostname of the node responsible for bootstrapping tasks
+#   Defaults to hiera('mysql_short_bootstrap_node_name')
+#
 # [*bind_address*]
 #   (Optional) The address that the local mysql instance should bind to.
 #   Defaults to $::hostname
+#
+# [*ca_file*]
+#   (Optional) The path to the CA file that will be used for the TLS
+#   configuration. It's only used if internal TLS is enabled.
+#   Defaults to undef
+#
+# [*certificate_specs*]
+#   (Optional) The specifications to give to certmonger for the certificate
+#   it will create. Note that the certificate nickname must be 'mysql' in
+#   the case of this service.
+#   Example with hiera:
+#     tripleo::profile::base::database::mysql::certificate_specs:
+#       hostname: <overcloud controller fqdn>
+#       service_certificate: <service certificate path>
+#       service_key: <service key path>
+#       principal: "mysql/<overcloud controller fqdn>"
+#   Defaults to hiera('tripleo::profile::base::database::mysql::certificate_specs', {}).
+#
+# [*enable_internal_tls*]
+#   (Optional) Whether TLS in the internal network is enabled or not.
+#   Defaults to hiera('enable_internal_tls', false)
 #
 # [*gmcast_listen_addr*]
 #   (Optional) This variable defines the address on which the node listens to
 #   connections from other nodes in the cluster.
 #   Defaults to hiera('mysql_bind_host')
 #
+# [*innodb_flush_log_at_trx_commit*]
+#   (Optional) Disk flush behavior for MySQL under Galera.  A value of
+#   '1' indicates flush to disk per transaction.   A value of '2' indicates
+#   flush to disk every second, flushing all unflushed transactions in
+#   one step.
+#   Defaults to hiera('innodb_flush_log_at_trx_commit', '1')
+#
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
 #   for more details.
 #   Defaults to hiera('step')
 #
+# [*pcs_tries*]
+#   (Optional) The number of times pcs commands should be retried.
+#   Defaults to hiera('pcs_tries', 20)
+#
 class tripleo::profile::pacemaker::database::mysql (
-  $bind_address       = $::hostname,
-  $gmcast_listen_addr = hiera('mysql_bind_host'),
-  $step               = hiera('step'),
+  $bootstrap_node                 = hiera('mysql_short_bootstrap_node_name'),
+  $bind_address                   = $::hostname,
+  $ca_file                        = undef,
+  $certificate_specs              = hiera('tripleo::profile::base::database::mysql::certificate_specs', {}),
+  $enable_internal_tls            = hiera('enable_internal_tls', false),
+  $gmcast_listen_addr             = hiera('mysql_bind_host'),
+  $innodb_flush_log_at_trx_commit = hiera('innodb_flush_log_at_trx_commit', '1'),
+  $step                           = Integer(hiera('step')),
+  $pcs_tries                      = hiera('pcs_tries', 20),
 ) {
-  if $::hostname == downcase(hiera('bootstrap_nodeid')) {
+  if $::hostname == downcase($bootstrap_node) {
     $pacemaker_master = true
   } else {
     $pacemaker_master = false
   }
 
-  # use only mysql_node_names when we land a patch in t-h-t that
-  # switches to autogenerating these values from composable services
-  # The galera node names need to match the pacemaker node names... so if we
-  # want to use FQDNs for this, the cluster will not finish bootstrapping,
-  # since all the nodes will be marked as slaves. For now, we'll stick to the
-  # short name which is already registered in pacemaker until we get around
-  # this issue.
-  $galera_node_names_lookup = hiera('mysql_short_node_names', hiera('mysql_node_names', $::hostname))
+  $galera_node_names_lookup = hiera('mysql_short_node_names', $::hostname)
+  $galera_fqdns_names_lookup = hiera('mysql_node_names', $::hostname)
+
   if is_array($galera_node_names_lookup) {
-    $galera_nodes = downcase(join($galera_node_names_lookup, ','))
+    $galera_nodes_count = length($galera_node_names_lookup)
+    $galera_nodes = downcase(join($galera_fqdns_names_lookup, ','))
+    $galera_name_pairs = zip($galera_node_names_lookup, $galera_fqdns_names_lookup)
   } else {
+    $galera_nodes_count = 1
     $galera_nodes = downcase($galera_node_names_lookup)
+    $galera_name_pairs = [[$galera_node_names_lookup, $galera_fqdns_names_lookup]]
   }
-  $galera_nodes_count = count(split($galera_nodes, ','))
+
+  # NOTE(jaosorior): The usage of cluster_host_map requires resource-agents-3.9.5-82.el7_3.11
+  $processed_galera_name_pairs = $galera_name_pairs.map |$pair| { join($pair, ':') }
+  $cluster_host_map = join($processed_galera_name_pairs, ';')
+
+  if $enable_internal_tls {
+    $tls_certfile = $certificate_specs['service_certificate']
+    $tls_keyfile = $certificate_specs['service_key']
+    if $ca_file {
+      $tls_ca_options = "socket.ssl_ca=${ca_file}"
+    } else {
+      $tls_ca_options = ''
+    }
+    $tls_options = "socket.ssl_key=${tls_keyfile};socket.ssl_cert=${tls_certfile};${tls_ca_options};"
+  } else {
+    $tls_options = ''
+  }
 
   $mysqld_options = {
     'mysqld' => {
-      'skip-name-resolve'             => '1',
-      'binlog_format'                 => 'ROW',
-      'default-storage-engine'        => 'innodb',
-      'innodb_autoinc_lock_mode'      => '2',
-      'innodb_locks_unsafe_for_binlog'=> '1',
-      'query_cache_size'              => '0',
-      'query_cache_type'              => '0',
-      'bind-address'                  => $bind_address,
-      'max_connections'               => hiera('mysql_max_connections'),
-      'open_files_limit'              => '-1',
-      'wsrep_on'                      => 'ON',
-      'wsrep_provider'                => '/usr/lib64/galera/libgalera_smm.so',
-      'wsrep_cluster_name'            => 'galera_cluster',
-      'wsrep_cluster_address'         => "gcomm://${galera_nodes}",
-      'wsrep_slave_threads'           => '1',
-      'wsrep_certify_nonPK'           => '1',
-      'wsrep_max_ws_rows'             => '131072',
-      'wsrep_max_ws_size'             => '1073741824',
-      'wsrep_debug'                   => '0',
-      'wsrep_convert_LOCK_to_trx'     => '0',
-      'wsrep_retry_autocommit'        => '1',
-      'wsrep_auto_increment_control'  => '1',
-      'wsrep_drupal_282555_workaround'=> '0',
-      'wsrep_causal_reads'            => '0',
-      'wsrep_sst_method'              => 'rsync',
-      'wsrep_provider_options'        => "gmcast.listen_addr=tcp://${gmcast_listen_addr}:4567;",
+      'skip-name-resolve'              => '1',
+      'binlog_format'                  => 'ROW',
+      'default-storage-engine'         => 'innodb',
+      'innodb_autoinc_lock_mode'       => '2',
+      'innodb_locks_unsafe_for_binlog' => '1',
+      'innodb_file_per_table'          => 'ON',
+      'innodb_flush_log_at_trx_commit' => $innodb_flush_log_at_trx_commit,
+      'query_cache_size'               => '0',
+      'query_cache_type'               => '0',
+      'bind-address'                   => $bind_address,
+      'max_connections'                => hiera('mysql_max_connections'),
+      'open_files_limit'               => '-1',
+      'wsrep_on'                       => 'ON',
+      'wsrep_provider'                 => '/usr/lib64/galera/libgalera_smm.so',
+      'wsrep_cluster_name'             => 'galera_cluster',
+      'wsrep_cluster_address'          => "gcomm://${galera_nodes}",
+      'wsrep_slave_threads'            => '1',
+      'wsrep_certify_nonPK'            => '1',
+      'wsrep_max_ws_rows'              => '131072',
+      'wsrep_max_ws_size'              => '1073741824',
+      'wsrep_debug'                    => '0',
+      'wsrep_convert_LOCK_to_trx'      => '0',
+      'wsrep_retry_autocommit'         => '1',
+      'wsrep_auto_increment_control'   => '1',
+      'wsrep_drupal_282555_workaround' => '0',
+      'wsrep_causal_reads'             => '0',
+      'wsrep_sst_method'               => 'rsync',
+      'wsrep_provider_options'         => "gmcast.listen_addr=tcp://${gmcast_listen_addr}:4567;${tls_options}",
     }
+  }
+
+  # since we are configuring rsync for wsrep_sst_method, we ought to make sure
+  # it's installed. We only includ this at step 2 since puppet-rsync may be
+  # included later and also adds the package resource.
+  if $step == 2 {
+      if ! defined(Package['rsync']) {
+          package {'rsync':}
+      }
   }
 
   # remove_default_accounts parameter will execute some mysql commands
@@ -100,6 +168,7 @@ class tripleo::profile::pacemaker::database::mysql (
   }
 
   class { '::tripleo::profile::base::database::mysql':
+    bootstrap_node          => $bootstrap_node,
     manage_resources        => false,
     remove_default_accounts => $remove_default_accounts,
     mysql_server_options    => $mysqld_options,
@@ -108,19 +177,32 @@ class tripleo::profile::pacemaker::database::mysql (
   if $step >= 1 and $pacemaker_master and hiera('stack_action') == 'UPDATE' {
     tripleo::pacemaker::resource_restart_flag { 'galera-master':
       subscribe => File['mysql-config-file'],
-    }
+    } ~> Exec<| title == 'galera-ready' |>
   }
 
   if $step >= 2 {
+    pacemaker::property { 'galera-role-node-property':
+      property => 'galera-role',
+      value    => true,
+      tries    => $pcs_tries,
+      node     => $::hostname,
+    }
     if $pacemaker_master {
       pacemaker::resource::ocf { 'galera' :
         ocf_agent_name  => 'heartbeat:galera',
         op_params       => 'promote timeout=300s on-fail=block',
         master_params   => '',
         meta_params     => "master-max=${galera_nodes_count} ordered=true",
-        resource_params => "additional_parameters='--open-files-limit=16384' enable_creation=true wsrep_cluster_address='gcomm://${galera_nodes}'",
-        require         => Class['::mysql::server'],
-        before          => Exec['galera-ready'],
+        resource_params => "additional_parameters='--open-files-limit=16384' enable_creation=true wsrep_cluster_address='gcomm://${galera_nodes}' cluster_host_map='${cluster_host_map}'",
+        tries           => $pcs_tries,
+        location_rule   => {
+          resource_discovery => 'exclusive',
+          score              => 0,
+          expression         => ['galera-role eq true'],
+        },
+        require         => [Class['::mysql::server'],
+                            Pacemaker::Property['galera-role-node-property']],
+        notify          => Exec['galera-ready'],
       }
       exec { 'galera-ready' :
         command     => '/usr/bin/clustercheck >/dev/null',
@@ -128,6 +210,7 @@ class tripleo::profile::pacemaker::database::mysql (
         tries       => 180,
         try_sleep   => 10,
         environment => ['AVAILABLE_WHEN_READONLY=0'],
+        refreshonly => true,
         require     => Exec['create-root-sysconfig-clustercheck'],
       }
       # We add a clustercheck db user and we will switch /etc/sysconfig/clustercheck
@@ -146,20 +229,22 @@ class tripleo::profile::pacemaker::database::mysql (
         user       => 'clustercheck@localhost',
       }
 
-      # We create databases for services at step 2 as well. This ensures
+      # We create databases and users for services at step 2 as well. This ensures
       # Galara is up before those get created
       Exec['galera-ready'] -> Mysql_database<||>
+      Exec['galera-ready'] -> Mysql_user<||>
 
     }
     # This step is to create a sysconfig clustercheck file with the root user and empty password
     # on the first install only (because later on the clustercheck db user will be used)
     # We are using exec and not file in order to not have duplicate definition errors in puppet
-    # when we later set the the file to contain the clustercheck data
+    # when we later set the file to contain the clustercheck data
     exec { 'create-root-sysconfig-clustercheck':
       command => "/bin/echo 'MYSQL_USERNAME=root\nMYSQL_PASSWORD=\'\'\nMYSQL_HOST=localhost\n' > /etc/sysconfig/clustercheck",
       unless  => '/bin/test -e /etc/sysconfig/clustercheck && grep -q clustercheck /etc/sysconfig/clustercheck',
     }
     xinetd::service { 'galera-monitor' :
+      bind           => hiera('mysql_bind_host'),
       port           => '9200',
       server         => '/usr/bin/clustercheck',
       per_source     => 'UNLIMITED',

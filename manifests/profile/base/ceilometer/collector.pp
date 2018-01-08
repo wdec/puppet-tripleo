@@ -27,9 +27,30 @@
 #   for more details.
 #   Defaults to hiera('step')
 #
+# [*ceilometer_backend*]
+#   (Optional) The ceilometer backend to use.
+#   Defaults to hiera('ceilometer_backend', 'mongodb')
+#
+# [*mongodb_ipv6*]
+#   (Optional) Flag to indicate if mongodb is using ipv6
+#   Defaults to hiera('mongodb::server::ipv6', false)
+#
+# [*mongodb_node_ips*]
+#   (Optional) Array of mongodb node ip address. Required if backend is set
+#   to mongodb.
+#   Defaults to hiera('mongodb_node_ips', [])
+#
+# [*mongodb_replset*]
+#   (Optional) Replica set for mongodb. Required if backend is mongodb
+#   Defaults to hiera(''mongodb::server::replset', '')
+#
 class tripleo::profile::base::ceilometer::collector (
-  $bootstrap_node = hiera('bootstrap_nodeid', undef),
-  $step           = hiera('step'),
+  $bootstrap_node     = hiera('bootstrap_nodeid', undef),
+  $step               = Integer(hiera('step')),
+  $ceilometer_backend = hiera('ceilometer_backend', 'mongodb'),
+  $mongodb_ipv6       = hiera('mongodb::server::ipv6', false),
+  $mongodb_node_ips   = hiera('mongodb_node_ips', []),
+  $mongodb_replset    = hiera('mongodb::server::replset', undef)
 ) {
   if $::hostname == downcase($bootstrap_node) {
     $sync_db = true
@@ -37,42 +58,30 @@ class tripleo::profile::base::ceilometer::collector (
     $sync_db = false
   }
 
-  $ceilometer_backend = downcase(hiera('ceilometer_backend', 'mongodb'))
-  # MongoDB
-  if $ceilometer_backend == 'mongodb' {
-    # NOTE(gfidente): We need to pass the list of IPv6 addresses *with* port and
-    # without the brackets as 'members' argument for the 'mongodb_replset'
-    # resource.
-    if str2bool(hiera('mongodb::server::ipv6', false)) {
-      $mongo_node_ips_with_port_prefixed = prefix(hiera('mongodb_node_ips'), '[')
-      $mongo_node_ips_with_port = suffix($mongo_node_ips_with_port_prefixed, ']:27017')
-      $mongo_node_ips_with_port_nobr = suffix(hiera('mongodb_node_ips'), ':27017')
-    } else {
-      $mongo_node_ips_with_port = suffix(hiera('mongodb_node_ips'), ':27017')
-      $mongo_node_ips_with_port_nobr = suffix(hiera('mongodb_node_ips'), ':27017')
-    }
-    $mongo_node_string = join($mongo_node_ips_with_port, ',')
-
-    $mongodb_replset = hiera('mongodb::server::replset')
-    $ceilometer_mongodb_conn_string = "mongodb://${mongo_node_string}/ceilometer?replicaSet=${mongodb_replset}"
-  }
-
   include ::tripleo::profile::base::ceilometer
 
-  if $step >= 3 and $sync_db {
-    include ::ceilometer::db::sync
-  }
-
   if $step >= 4 or ($step >= 3 and $sync_db) {
-    if $ceilometer_backend == 'mongodb' {
+    if downcase($ceilometer_backend) == 'mongodb' {
+      if empty($mongodb_node_ips) {
+        fail('Provided mongodb node ip addresses are empty')
+      }
+      if !$mongodb_replset {
+        fail('mongodb_replset is required when using mongodb')
+      }
+      $mongo_nodes = suffix(any2array(normalize_ip_for_uri($mongodb_node_ips)), ':27017')
+      $mongo_node_string = join($mongo_nodes, ',')
+      $ceilometer_mongodb_conn_string = "mongodb://${mongo_node_string}/ceilometer?replicaSet=${mongodb_replset}"
+
       class { '::ceilometer::db' :
+        sync_db             => $sync_db,
         database_connection => $ceilometer_mongodb_conn_string,
       }
     } else {
-      include ::ceilometer::db
+      class { '::ceilometer::db' :
+        sync_db => $sync_db,
+      }
     }
     include ::ceilometer::collector
     include ::ceilometer::dispatcher::gnocchi
   }
-
 }

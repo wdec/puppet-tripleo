@@ -26,10 +26,30 @@
 #   (Optional) The hostname of the node responsible for bootstrapping tasks
 #   Defaults to hiera('bootstrap_nodeid')
 #
+# [*certificate_specs*]
+#   (Optional) The specifications to give to certmonger for the certificate
+#   it will create. Note that the certificate nickname must be 'mysql' in
+#   the case of this service.
+#   Example with hiera:
+#     tripleo::profile::base::database::mysql::certificate_specs:
+#       hostname: <overcloud controller fqdn>
+#       service_certificate: <service certificate path>
+#       service_key: <service key path>
+#       principal: "mysql/<overcloud controller fqdn>"
+#   Defaults to {}.
+#
+# [*enable_internal_tls*]
+#   (Optional) Whether TLS in the internal network is enabled or not.
+#   Defaults to hiera('enable_internal_tls', false)
+#
 # [*generate_dropin_file_limit*]
 #   (Optional) Generate a systemd drop-in file to raise the file descriptor
 #   limit for the mysql service.
 #   Defaults to false
+#
+# [*innodb_buffer_pool_size*]
+#   (Optional) Configure the size of the MySQL buffer pool.
+#   Defaults to hiera('innodb_buffer_pool_size', undef)
 #
 # [*manage_resources*]
 #   (Optional) Whether or not manage root user, root my.cnf, and service.
@@ -53,15 +73,19 @@
 #   for more details.
 #   Defaults to hiera('step')
 #
+#
 class tripleo::profile::base::database::mysql (
-  $bind_address               = $::hostname,
-  $bootstrap_node             = hiera('bootstrap_nodeid', undef),
-  $generate_dropin_file_limit = false,
-  $manage_resources           = true,
-  $mysql_server_options       = {},
-  $mysql_max_connections      = hiera('mysql_max_connections', undef),
-  $remove_default_accounts    = true,
-  $step                       = hiera('step'),
+  $bind_address                  = $::hostname,
+  $bootstrap_node                = hiera('bootstrap_nodeid', undef),
+  $certificate_specs             = {},
+  $enable_internal_tls           = hiera('enable_internal_tls', false),
+  $generate_dropin_file_limit    = false,
+  $innodb_buffer_pool_size       = hiera('innodb_buffer_pool_size', undef),
+  $manage_resources              = true,
+  $mysql_server_options          = {},
+  $mysql_max_connections         = hiera('mysql_max_connections', undef),
+  $remove_default_accounts       = true,
+  $step                          = Integer(hiera('step')),
 ) {
 
   if $::hostname == downcase($bootstrap_node) {
@@ -71,6 +95,18 @@ class tripleo::profile::base::database::mysql (
   }
 
   validate_hash($mysql_server_options)
+  validate_hash($certificate_specs)
+
+  if $enable_internal_tls {
+    $tls_certfile = $certificate_specs['service_certificate']
+    $tls_keyfile = $certificate_specs['service_key']
+
+    # Force users/grants created to use TLS connections
+    Openstacklib::Db::Mysql <||> { tls_options => ['SSL'] }
+  } else {
+    $tls_certfile = undef
+    $tls_keyfile = undef
+  }
 
   # non-ha scenario
   if $manage_resources {
@@ -92,9 +128,15 @@ class tripleo::profile::base::database::mysql (
     # MysqlNetwork and ControllerHostnameResolveNetwork in ServiceNetMap
     $mysql_server_default = {
       'mysqld' => {
-        'bind-address'     => $bind_address,
-        'max_connections'  => $mysql_max_connections,
-        'open_files_limit' => '-1',
+        'bind-address'            => $bind_address,
+        'max_connections'         => $mysql_max_connections,
+        'open_files_limit'        => '-1',
+        'innodb_buffer_pool_size' => $innodb_buffer_pool_size,
+        'innodb_file_per_table'   => 'ON',
+        'ssl'                     => $enable_internal_tls,
+        'ssl-key'                 => $tls_keyfile,
+        'ssl-cert'                => $tls_certfile,
+        'ssl-ca'                  => undef,
       }
     }
     $mysql_server_options_real = deep_merge($mysql_server_default, $mysql_server_options)
@@ -129,7 +171,13 @@ class tripleo::profile::base::database::mysql (
     if hiera('cinder_api_enabled', false) {
       include ::cinder::db::mysql
     }
-    if hiera('glance_registry_enabled', false) {
+    if hiera('barbican_api_enabled', false) {
+      include ::barbican::db::mysql
+    }
+    if hiera('congress_enabled', false) {
+      include ::congress::db::mysql
+    }
+    if hiera('glance_api_enabled', false) {
       include ::glance::db::mysql
     }
     if hiera('gnocchi_api_enabled', false) {
@@ -140,6 +188,9 @@ class tripleo::profile::base::database::mysql (
     }
     if hiera('ironic_api_enabled', false) {
       include ::ironic::db::mysql
+    }
+    if hiera('ironic_inspector_enabled', false) {
+      include ::ironic::inspector::db::mysql
     }
     if hiera('keystone_enabled', false) {
       include ::keystone::db::mysql
@@ -157,11 +208,33 @@ class tripleo::profile::base::database::mysql (
       include ::nova::db::mysql
       include ::nova::db::mysql_api
     }
+    if hiera('nova_placement_enabled', false) {
+      include ::nova::db::mysql_placement
+    }
+    if hiera('octavia_api_enabled', false) {
+      include ::octavia::db::mysql
+    }
     if hiera('sahara_api_enabled', false) {
       include ::sahara::db::mysql
     }
+    if hiera('tacker_enabled', false) {
+      include ::tacker::db::mysql
+    }
     if hiera('trove_api_enabled', false) {
       include ::trove::db::mysql
+    }
+    if hiera('panko_api_enabled', false) {
+      include ::panko::db::mysql
+    }
+    if hiera('ec2_api_enabled', false) {
+      include ::ec2api::db::mysql
+    }
+    if hiera('zaqar_api_enabled', false) and hiera('zaqar::db::mysql::user', '') == 'zaqar' {
+      # NOTE: by default zaqar uses mongodb
+      include ::zaqar::db::mysql
+    }
+    if hiera('veritas_hyperscale_controller_enabled', false) {
+      include ::veritas_hyperscale::db::mysql
     }
   }
 

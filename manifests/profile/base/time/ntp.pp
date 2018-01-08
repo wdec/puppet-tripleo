@@ -24,7 +24,7 @@ class tripleo::profile::base::time::ntp {
   service { 'chronyd':
     ensure => stopped,
     enable => false,
-    before => Class['::ntp'],
+    before => Class['ntp']
   }
   include ::ntp
 }

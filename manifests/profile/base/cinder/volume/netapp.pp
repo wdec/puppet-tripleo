@@ -29,7 +29,7 @@
 #
 class tripleo::profile::base::cinder::volume::netapp (
   $backend_name = hiera('cinder::backend::netapp::volume_backend_name', 'tripleo_netapp'),
-  $step         = hiera('step'),
+  $step         = Integer(hiera('step')),
 ) {
   include ::tripleo::profile::base::cinder::volume
 
@@ -59,6 +59,8 @@ class tripleo::profile::base::cinder::volume::netapp (
       netapp_storage_pools         => hiera('cinder::backend::netapp::netapp_storage_pools', undef),
       netapp_eseries_host_type     => hiera('cinder::backend::netapp::netapp_eseries_host_type', undef),
       netapp_webservice_path       => hiera('cinder::backend::netapp::netapp_webservice_path', undef),
+      nas_secure_file_operations   => hiera('cinder::backend::netapp::nas_secure_file_operations', undef),
+      nas_secure_file_permissions  => hiera('cinder::backend::netapp::nas_secure_file_permissions', undef),
     }
   }
 

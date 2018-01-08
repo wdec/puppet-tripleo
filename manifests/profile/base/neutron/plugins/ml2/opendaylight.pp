@@ -30,6 +30,10 @@
 #   (Optional) Password to configure for OpenDaylight
 #   Defaults to 'admin'
 #
+# [*odl_url_ip*]
+#   (Optional) Virtual IP address for ODL Api Service
+#   Defaults to hiera('opendaylight_api_vip')
+#
 # [*conn_proto*]
 #   (Optional) Protocol to use to for ODL REST access
 #   Defaults to hiera('opendaylight::nb_connection_protocol')
@@ -43,19 +47,20 @@ class tripleo::profile::base::neutron::plugins::ml2::opendaylight (
   $odl_port     = hiera('opendaylight::odl_rest_port'),
   $odl_username = hiera('opendaylight::username'),
   $odl_password = hiera('opendaylight::password'),
+  $odl_url_ip   = hiera('opendaylight_api_vip'),
   $conn_proto   = hiera('opendaylight::nb_connection_protocol'),
-  $step         = hiera('step'),
+  $step         = Integer(hiera('step')),
 ) {
 
   if $step >= 4 {
-    $odl_url_ip = hiera('opendaylight_api_vip')
+    if ! $odl_url_ip { fail('OpenDaylight API VIP is Empty') }
 
-    if ! $odl_url_ip { fail('OpenDaylight Controller IP/VIP is Empty') }
-
+    # TODO(trozet) remove odl_features once ODL BZ: 9256, 9147 are fixed
     class { '::neutron::plugins::ml2::opendaylight':
       odl_username => $odl_username,
       odl_password => $odl_password,
-      odl_url      => "${conn_proto}://${odl_url_ip}:${odl_port}/controller/nb/v2/neutron";
+      odl_url      => "${conn_proto}://${odl_url_ip}:${odl_port}/controller/nb/v2/neutron",
+      odl_features => 'False';
     }
   }
 }

@@ -27,13 +27,14 @@
 #   Defaults to true
 #
 class tripleo::profile::base::ironic::conductor (
-  $step = hiera('step'),
+  $step = Integer(hiera('step')),
   $manage_pxe = true,
 ) {
   include ::tripleo::profile::base::ironic
 
   if $step >= 4 {
       include ::ironic::conductor
+      include ::ironic::drivers::interfaces
       include ::ironic::drivers::pxe
       if $manage_pxe {
           include ::ironic::pxe
@@ -43,6 +44,18 @@ class tripleo::profile::base::ironic::conductor (
       include ::ironic::drivers::drac
       include ::ironic::drivers::ilo
       include ::ironic::drivers::ipmi
-      include ::ironic::drivers::ssh
+      include ::ironic::drivers::redfish
+      # TODO: deprecated code cleanup, remove in Queens
+      ironic_config {
+        'ssh/libvirt_uri': ensure => absent;
+      }
+
+      # Configure access to other services
+      include ::ironic::cinder
+      include ::ironic::drivers::inspector
+      include ::ironic::glance
+      include ::ironic::neutron
+      include ::ironic::service_catalog
+      include ::ironic::swift
   }
 }

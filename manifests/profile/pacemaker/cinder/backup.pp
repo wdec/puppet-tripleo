@@ -20,16 +20,21 @@
 #
 # [*bootstrap_node*]
 #   (Optional) The hostname of the node responsible for bootstrapping tasks
-#   Defaults to hiera('bootstrap_nodeid')
+#   Defaults to hiera('cinder_backup_short_bootstrap_node_name')
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
 #   for more details.
 #   Defaults to hiera('step')
 #
+# [*pcs_tries*]
+#   (Optional) The number of times pcs commands should be retried.
+#   Defaults to hiera('pcs_tries', 20)
+#
 class tripleo::profile::pacemaker::cinder::backup (
-  $bootstrap_node = hiera('bootstrap_nodeid'),
-  $step           = hiera('step'),
+  $bootstrap_node = hiera('cinder_backup_short_bootstrap_node_name'),
+  $step           = Integer(hiera('step')),
+  $pcs_tries      = hiera('pcs_tries', 20),
 ) {
 
   Service <| tag == 'cinder::backup' |> {
@@ -47,15 +52,29 @@ class tripleo::profile::pacemaker::cinder::backup (
 
   include ::tripleo::profile::base::cinder::backup
 
+  if $step >= 2 {
+    pacemaker::property { 'cinder-backup-role-node-property':
+      property => 'cinder-backup-role',
+      value    => true,
+      tries    => $pcs_tries,
+      node     => $::hostname,
+    }
+  }
+
   if $step >= 3 and $pacemaker_master and hiera('stack_action') == 'UPDATE' {
     Cinder_config<||>
-    ~>
-    tripleo::pacemaker::resource_restart_flag { "${::cinder::params::backup_service}": }
+    ~> tripleo::pacemaker::resource_restart_flag { "${::cinder::params::backup_service}": }
   }
 
   if $step >= 5 and $pacemaker_master {
     pacemaker::resource::service { $::cinder::params::backup_service :
-      op_params => 'start timeout=200s stop timeout=200s',
+      op_params     => 'start timeout=200s stop timeout=200s',
+      tries         => $pcs_tries,
+      location_rule => {
+        resource_discovery => 'exclusive',
+        score              => 0,
+        expression         => ['cinder-backup-role eq true'],
+      }
     }
   }
 

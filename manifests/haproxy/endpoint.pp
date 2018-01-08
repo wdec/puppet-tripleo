@@ -36,7 +36,7 @@
 #
 # [*public_virtual_ip*]
 #  Address in which the proxy endpoint will be listening in the public network.
-#  If this service is internal only this should be ommited.
+#  If this service is internal only this should be ommitted.
 #  Defaults to undef.
 #
 # [*mode*]
@@ -64,9 +64,32 @@
 #  Certificate path used to enable TLS for the public proxy endpoint.
 #  Defaults to undef.
 #
-# [*internal_certificate*]
-#  Certificate path used to enable TLS for the internal proxy endpoint.
-#  Defaults to undef.
+# [*use_internal_certificates*]
+#  Flag that indicates if we'll use an internal certificate for this specific
+#  service. When set, enables SSL on the internal API endpoints using the file
+#  that certmonger is tracking; this is derived from the network the service is
+#  listening on.
+#  Defaults to false
+#
+# [*internal_certificates_specs*]
+#  A hash that should contain the specs that were used to create the
+#  certificates. As the name indicates, only the internal certificates will be
+#  fetched from here. And the keys should follow the following pattern
+#  "haproxy-<network name>". The network name should be as it was defined in
+#  tripleo-heat-templates.
+#  Note that this is only taken into account if the $use_internal_certificates
+#  flag is set.
+#  Defaults to {}
+#
+# [*service_network*]
+#  (optional) Indicates the network that the service is running on. Used for
+#  fetching the certificate for that specific network.
+#  Defaults to undef
+#
+# [*manage_firewall*]
+#  (optional) Enable or disable firewall settings for ports exposed by HAProxy
+#  (false means disabled, and true means enabled)
+#  Defaults to hiera('tripleo::firewall::manage_firewall', true)
 #
 define tripleo::haproxy::endpoint (
   $internal_ip,
@@ -74,35 +97,71 @@ define tripleo::haproxy::endpoint (
   $ip_addresses,
   $server_names,
   $member_options,
-  $public_virtual_ip         = undef,
-  $mode                      = undef,
-  $haproxy_listen_bind_param = undef,
-  $listen_options            = {
+  $public_virtual_ip           = undef,
+  $mode                        = undef,
+  $haproxy_listen_bind_param   = undef,
+  $listen_options              = {
     'option' => [],
   },
-  $public_ssl_port           = undef,
-  $public_certificate        = undef,
-  $internal_certificate      = undef,
+  $public_ssl_port             = undef,
+  $public_certificate          = undef,
+  $use_internal_certificates   = false,
+  $internal_certificates_specs = {},
+  $service_network             = undef,
+  $manage_firewall             = hiera('tripleo::firewall::manage_firewall', true),
 ) {
   if $public_virtual_ip {
     # service exposed to the public network
 
     if $public_certificate {
+      if $mode == 'http' {
+        $tls_listen_options = {
+          'rsprep'       => '^Location:\ http://(.*) Location:\ https://\1',
+          'redirect'     => "scheme https code 301 if { hdr(host) -i ${public_virtual_ip} } !{ ssl_fc }",
+          'option'       => 'forwardfor',
+        }
+        $listen_options_real = merge($tls_listen_options, $listen_options)
+      } else {
+        $listen_options_real = $listen_options
+      }
       $public_bind_opts = list_to_hash(suffix(any2array($public_virtual_ip), ":${public_ssl_port}"),
                                         union($haproxy_listen_bind_param, ['ssl', 'crt', $public_certificate]))
     } else {
+      $listen_options_real = $listen_options
       $public_bind_opts = list_to_hash(suffix(any2array($public_virtual_ip), ":${service_port}"), $haproxy_listen_bind_param)
     }
   } else {
     # internal service only
     $public_bind_opts = {}
+    $listen_options_real = $listen_options
   }
 
-  if $internal_certificate {
+  if $use_internal_certificates {
+    if !$service_network {
+      fail("The service_network for this service is undefined. Can't configure TLS for the internal network.")
+    }
+
+    if $service_network == 'external' and $public_certificate {
+      # NOTE(jaosorior): This service has been configured to use the external
+      # network. We should use the public certificate in this case.
+      $internal_cert_path = $public_certificate
+    } else {
+      # NOTE(jaosorior): This service is configured for the internal network.
+      # We use the certificate spec hash. The key of the
+      # internal_certificates_specs hash must must match the convention
+      # haproxy-<network name> or else this will fail. Futherly, it must
+      # contain the path that we'll use under 'service_pem'.
+      $internal_cert_path = $internal_certificates_specs["haproxy-${service_network}"]['service_pem']
+    }
     $internal_bind_opts = list_to_hash(suffix(any2array($internal_ip), ":${service_port}"),
-                                        union($haproxy_listen_bind_param, ['ssl', 'crt', $public_certificate]))
+                                        union($haproxy_listen_bind_param, ['ssl', 'crt', $internal_cert_path]))
   } else {
-    $internal_bind_opts = list_to_hash(suffix(any2array($internal_ip), ":${service_port}"), $haproxy_listen_bind_param)
+    if $service_network == 'external' and $public_certificate {
+      $internal_bind_opts = list_to_hash(suffix(any2array($internal_ip), ":${service_port}"),
+                                          union($haproxy_listen_bind_param, ['ssl', 'crt', $public_certificate]))
+    } else {
+      $internal_bind_opts = list_to_hash(suffix(any2array($internal_ip), ":${service_port}"), $haproxy_listen_bind_param)
+    }
   }
   $bind_opts = merge($internal_bind_opts, $public_bind_opts)
 
@@ -110,7 +169,7 @@ define tripleo::haproxy::endpoint (
     bind             => $bind_opts,
     collect_exported => false,
     mode             => $mode,
-    options          => $listen_options,
+    options          => $listen_options_real,
   }
   haproxy::balancermember { "${name}":
     listening_service => $name,
@@ -119,7 +178,7 @@ define tripleo::haproxy::endpoint (
     server_names      => $server_names,
     options           => $member_options,
   }
-  if hiera('manage_firewall', true) {
+  if $manage_firewall {
     include ::tripleo::firewall
     # This block will construct firewall rules only when we specify
     # a port for the regular service and also the ssl port for the service.
@@ -138,6 +197,8 @@ define tripleo::haproxy::endpoint (
           'dport' => $public_ssl_port,
         },
       }
+    } else {
+      $haproxy_ssl_firewall_rules = {}
     }
     $firewall_rules = merge($haproxy_firewall_rules, $haproxy_ssl_firewall_rules)
     if $service_port or $public_ssl_port {

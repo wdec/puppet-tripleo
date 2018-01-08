@@ -5,10 +5,6 @@ mod 'haproxy',
   :git => 'https://github.com/puppetlabs/puppetlabs-haproxy',
   :ref => 'master'
 
-mod 'midonet',
-  :git => 'https://git.openstack.org/openstack/puppet-midonet',
-  :ref => '9a54db9438cdfea77b5ef7cd151c166c5eca1847'
-
 mod 'tomcat',
   :git => 'https://github.com/puppetlabs/puppetlabs-tomcat',
   :ref => '1.3.2'
@@ -29,6 +25,18 @@ mod 'datacat',
   :git => 'https://github.com/richardc/puppet-datacat',
   :ref => '0.6.2'
 
+mod 'etcd',
+  :git => 'https://github.com/cristifalcas/puppet-etcd',
+  :ref => '1.11.0'
+
+mod 'fdio',
+  :git => 'https://git.fd.io/puppet-fdio',
+  :ref => 'master'
+
+mod 'certmonger',
+  :git => 'https://github.com/earsdown/puppet-certmonger',
+  :ref => 'v1.1.1'
+
 mod 'ntp',
   :git => 'https://github.com/puppetlabs/puppetlabs-ntp',
   :ref => '4.2.x'
@@ -37,6 +45,15 @@ mod 'systemd',
   :git => 'https://github.com/camptocamp/puppet-systemd',
   :ref => 'master'
 
+mod 'opendaylight',
+  :git => 'https://git.opendaylight.org/gerrit/integration/packaging/puppet-opendaylight',
+  :ref => 'master'
+
 mod 'ssh',
   :git => 'https://github.com/saz/puppet-ssh',
   :ref => 'v3.0.1'
+
+mod 'snmp',
+  :git => 'https://github.com/razorsedge/puppet-snmp',
+  :ref => 'master'
+

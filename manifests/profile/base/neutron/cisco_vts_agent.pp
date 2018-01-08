@@ -34,7 +34,7 @@
 class tripleo::profile::base::neutron::cisco_vts_agent(
   $vts_url_ip   = hiera('vts::vts_ip'),
   $vts_port     = hiera('vts::vts_port', 8888),
-  $step         = hiera('step'),
+  $step         = Integer(hiera('step')),
 ) {
   include ::tripleo::profile::base::neutron
 

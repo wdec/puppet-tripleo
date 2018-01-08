@@ -18,9 +18,34 @@
 #
 # === Parameters
 #
+# [*bootstrap_node*]
+#   (Optional) The hostname of the node responsible for bootstrapping tasks
+#   Defaults to hiera('bootstrap_nodeid')
+#
+# [*certificates_specs*]
+#   (Optional) The specifications to give to certmonger for the certificate(s)
+#   it will create.
+#   Example with hiera:
+#     apache_certificates_specs:
+#       httpd-internal_api:
+#         hostname: <overcloud controller fqdn>
+#         service_certificate: <service certificate path>
+#         service_key: <service key path>
+#         principal: "haproxy/<overcloud controller fqdn>"
+#   Defaults to hiera('apache_certificate_specs', {}).
+#
+# [*enable_internal_tls*]
+#   (Optional) Whether TLS in the internal network is enabled or not.
+#   Defaults to hiera('enable_internal_tls', false)
+#
 # [*glance_backend*]
 #   (Optional) Glance backend(s) to use.
 #   Defaults to downcase(hiera('glance_backend', 'swift'))
+#
+# [*glance_network*]
+#   (Optional) The network name where the glance endpoint is listening on.
+#   This is set by t-h-t.
+#   Defaults to hiera('glance_api_network', undef)
 #
 # [*glance_nfs_enabled*]
 #   (Optional) Whether to use NFS mount as 'file' backend storage location.
@@ -32,42 +57,93 @@
 #   Defaults to hiera('step')
 #
 # [*rabbit_hosts*]
-#   list of the rabbbit host IPs
-#   Defaults to hiera('rabbitmq_node_ips')
+#   list of the rabbbit host fqdns
+#   Defaults to hiera('rabbitmq_node_names')
 #
 # [*rabbit_port*]
 #   IP port for rabbitmq service
 #   Defaults to hiera('glance::notify::rabbitmq::rabbit_port', 5672)
-
+#
+# [*tls_proxy_bind_ip*]
+#   IP on which the TLS proxy will listen on. Required only if
+#   enable_internal_tls is set.
+#   Defaults to undef
+#
+# [*tls_proxy_fqdn*]
+#   fqdn on which the tls proxy will listen on. required only used if
+#   enable_internal_tls is set.
+#   defaults to undef
+#
+# [*tls_proxy_port*]
+#   port on which the tls proxy will listen on. Only used if
+#   enable_internal_tls is set.
+#   defaults to 9292
+#
 class tripleo::profile::base::glance::api (
-  $glance_backend = downcase(hiera('glance_backend', 'swift')),
-  $glance_nfs_enabled = false,
-  $step           = hiera('step'),
-  $rabbit_hosts   = hiera('rabbitmq_node_ips', undef),
-  $rabbit_port    = hiera('glance::notify::rabbitmq::rabbit_port', 5672),
+  $bootstrap_node                = hiera('bootstrap_nodeid', undef),
+  $certificates_specs            = hiera('apache_certificates_specs', {}),
+  $enable_internal_tls           = hiera('enable_internal_tls', false),
+  $glance_backend                = downcase(hiera('glance_backend', 'swift')),
+  $glance_network                = hiera('glance_api_network', undef),
+  $glance_nfs_enabled            = false,
+  $step                          = Integer(hiera('step')),
+  $rabbit_hosts                  = hiera('rabbitmq_node_names', undef),
+  $rabbit_port                   = hiera('glance::notify::rabbitmq::rabbit_port', 5672),
+  $tls_proxy_bind_ip             = undef,
+  $tls_proxy_fqdn                = undef,
+  $tls_proxy_port                = 9292,
 ) {
+  if $::hostname == downcase($bootstrap_node) {
+    $sync_db = true
+  } else {
+    $sync_db = false
+  }
 
   if $step >= 1 and $glance_nfs_enabled {
     include ::tripleo::glance::nfs_mount
   }
 
-  if $step >= 4 {
+  if $step >= 4 or ($step >= 3 and $sync_db) {
+    if $enable_internal_tls {
+      if !$glance_network {
+        fail('glance_api_network is not set in the hieradata.')
+      }
+      if !$tls_proxy_bind_ip {
+        fail('glance_api_tls_proxy_bind_ip is not set in the hieradata.')
+      }
+      if !$tls_proxy_fqdn {
+        fail('tls_proxy_fqdn is required if internal TLS is enabled.')
+      }
+      $tls_certfile = $certificates_specs["httpd-${glance_network}"]['service_certificate']
+      $tls_keyfile = $certificates_specs["httpd-${glance_network}"]['service_key']
+
+      ::tripleo::tls_proxy { 'glance-api':
+        servername => $tls_proxy_fqdn,
+        ip         => $tls_proxy_bind_ip,
+        port       => $tls_proxy_port,
+        tls_cert   => $tls_certfile,
+        tls_key    => $tls_keyfile,
+        notify     => Class['::glance::api'],
+      }
+    }
     case $glance_backend {
-        'swift': { $backend_store = 'glance.store.swift.Store' }
-        'file': { $backend_store = 'glance.store.filesystem.Store' }
-        'rbd': { $backend_store = 'glance.store.rbd.Store' }
+        'swift': { $backend_store = 'swift' }
+        'file': { $backend_store = 'file' }
+        'rbd': { $backend_store = 'rbd' }
         default: { fail('Unrecognized glance_backend parameter.') }
     }
-    $http_store = ['glance.store.http.Store']
+    $http_store = ['http']
     $glance_store = concat($http_store, $backend_store)
 
     # TODO: notifications, scrubber, etc.
     include ::glance
     include ::glance::config
+    # TODO(jaosorior): Remove bind_host when we set it up conditionally in t-h-t
     class { '::glance::api':
-      stores => $glance_store,
+      stores  => $glance_store,
+      sync_db => $sync_db,
     }
-    $rabbit_endpoints = suffix(any2array(normalize_ip_for_uri($rabbit_hosts)), ":${rabbit_port}")
+    $rabbit_endpoints = suffix(any2array($rabbit_hosts), ":${rabbit_port}")
     class { '::glance::notify::rabbitmq' :
       rabbit_hosts => $rabbit_endpoints,
     }

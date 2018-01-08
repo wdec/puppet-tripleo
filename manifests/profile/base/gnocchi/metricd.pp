@@ -24,13 +24,11 @@
 #   Defaults to hiera('step')
 #
 class tripleo::profile::base::gnocchi::metricd (
-  $step = hiera('step'),
+  $step = Integer(hiera('step')),
 ) {
   include ::tripleo::profile::base::gnocchi
 
   if $step >= 5 {
     include ::gnocchi::metricd
-    Keystone_endpoint<||> -> Service['gnocchi-metricd']
-    Keystone_user_role<||> -> Service['gnocchi-metricd']
   }
 }

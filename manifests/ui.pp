@@ -25,70 +25,157 @@
 #
 # [*bind_host*]
 #  The host/ip address Apache will listen on.
-#  Optional. Defaults to undef (listen on all ip addresses).
+#  Optional. Defaults to hiera('controller_host')
 #
 # [*ui_port*]
 #  The port on which the UI is listening.
 #  Defaults to 3000
 #
-# [*keystone_url*]
-#  The keystone service url
-#  Defaults to hiera('keystone::endpoint::public_url')
+# [*excluded_languages*]
+#  A list of languages that shouldn't be enabled in the UI, e.g. ['en', 'de']
+#  Defaults to []
 #
-# [*heat_url*]
-#  The heat service url
-#  Defaults to hiera('heat::keystone::auth::public_url')
+# [*endpoint_proxy_keystone*]
+#  The keystone proxy endpoint url
+#  Defaults to undef
 #
-# [*heat_url*]
-#  The heat service url
-#  Defaults to hiera('heat::keystone::auth::public_url')
+# [*endpoint_config_keystone*]
+#  The keystone config endpoint url
+#  Defaults to undef
 #
-# [*heat_url*]
-#  The heat service url
-#  Defaults to hiera('heat::keystone::auth::public_url')
+# [*endpoint_proxy_heat*]
+#  The heat proxy endpoint url
+#  Defaults to undef
 #
-# [*ironic_url*]
-#  The ironic service url
-#  Defaults to hiera('ironic::keystone::auth::public_url')
+# [*endpoint_config_heat*]
+#  The heat config endpoint url
+#  Defaults to undef
 #
-# [*mistral_url*]
-#  The mistral service url
-#  Defaults to hiera('mistral::keystone::auth::public_url')
+# [*endpoint_proxy_ironic*]
+#  The ironic proxy endpoint url
+#  Defaults to undef
 #
-# [*swift_url*]
-#  The swift service url
-#  Defaults to hiera('swift::keystone::auth::public_url')
+# [*endpoint_proxy_ironic_inspector*]
+#  The ironic inspector proxy endpoint url
+#  Defaults to undef
 #
-# [*zaqar_websocket_url*]
-#  The zaqar websocket url
-#  Defaults to hiera('zaquar::keystone::auth_websocket::public_url')
+# [*endpoint_config_ironic*]
+#  The ironic config endpoint url
+#  Defaults to undef
+#
+# [*endpoint_config_ironic_inspector*]
+#  The ironic inspector config endpoint url
+#  Defaults to undef
+#
+# [*endpoint_proxy_mistral*]
+#  The mistral proxy endpoint url
+#  Defaults to undef
+#
+# [*endpoint_config_mistral*]
+#  The mistral config endpoint url
+#  Defaults to undef
+#
+# [*endpoint_proxy_swift*]
+#  The swift proxy endpoint url
+#  Defaults to undef
+#
+# [*endpoint_config_swift*]
+#  The swift config endpoint url
+#  Defaults to undef
+#
+# [*endpoint_proxy_zaqar*]
+#  The zaqar proxy endpoint url
+#  Defaults to undef
+#
+# [*endpoint_config_zaqar*]
+#  The zaqar config endpoint url
+#  Defaults to undf
 #
 # [*zaqar_default_queue*]
 #  The zaqar default queue
 #  A string.
 #  Defaults to 'tripleo'
 #
+# [*enabled_loggers*]
+#  List of enabled loggers
+#  Defaults to ['console', 'zaqar']
+#
 class tripleo::ui (
-  $servername          = $::fqdn,
-  $bind_host           = hiera('controller_host'),
-  $ui_port             = 3000,
-  $keystone_url        = hiera('keystone_auth_uri_v2'),
-  $heat_url            = hiera('heat::keystone::auth::public_url', undef),
-  $ironic_url          = hiera('ironic::keystone::auth::public_url', undef),
-  $mistral_url         = hiera('mistral::keystone::auth::public_url', undef),
-  $swift_url           = hiera('swift::keystone::auth::public_url', undef),
-  $zaqar_websocket_url = hiera('zaqar::keystone::auth_websocket::public_url', undef),
-  $zaqar_default_queue = 'tripleo'
+  $servername                       = $::fqdn,
+  $bind_host                        = hiera('controller_host'),
+  $ui_port                          = 3000,
+  $zaqar_default_queue              = 'tripleo',
+  $excluded_languages               = [],
+  $endpoint_proxy_zaqar             = undef,
+  $endpoint_proxy_keystone          = undef,
+  $endpoint_proxy_heat              = undef,
+  $endpoint_proxy_ironic            = undef,
+  $endpoint_proxy_ironic_inspector  = undef,
+  $endpoint_proxy_mistral           = undef,
+  $endpoint_proxy_swift             = undef,
+  $endpoint_config_zaqar            = undef,
+  $endpoint_config_keystone         = undef,
+  $endpoint_config_heat             = undef,
+  $endpoint_config_ironic           = undef,
+  $endpoint_config_ironic_inspector = undef,
+  $endpoint_config_mistral          = undef,
+  $endpoint_config_swift            = undef,
+  $enabled_loggers                  = ['console', 'zaqar'],
+
 ) {
+  package {'openstack-tripleo-ui': }
+
+  include ::apache
+  include ::apache::mod::proxy
+  include ::apache::mod::proxy_http
+  include ::apache::mod::proxy_wstunnel
 
   ::apache::vhost { 'tripleo-ui':
     ensure           => 'present',
+    require          => Package['openstack-tripleo-ui'],
     servername       => $servername,
     ip               => $bind_host,
     port             => $ui_port,
     docroot          => '/var/www/openstack-tripleo-ui/dist',
     options          => ['Indexes', 'FollowSymLinks'],
     fallbackresource => '/index.html',
+    proxy_pass       => [
+    {
+      'path' => '/zaqar',
+      'url'  => $endpoint_proxy_zaqar
+    },
+    {
+      'path'         => '/keystone',
+      'url'          => $endpoint_proxy_keystone,
+      'reverse_urls' => $endpoint_proxy_keystone
+    },
+    {
+      'path'         => '/heat',
+      'url'          => $endpoint_proxy_heat,
+      'reverse_urls' => $endpoint_proxy_heat
+    },
+    {
+      'path'         => '/ironic',
+      'url'          => $endpoint_proxy_ironic,
+      'reverse_urls' => $endpoint_proxy_ironic
+    },
+    {
+      'path'         => '/ironic-inspector',
+      'url'          => $endpoint_proxy_ironic_inspector,
+      'reverse_urls' => $endpoint_proxy_ironic_inspector
+    },
+    {
+      'path'         => '/mistral',
+      'url'          => $endpoint_proxy_mistral,
+      'reverse_urls' => $endpoint_proxy_mistral
+    },
+    {
+      'path'         => '/swift',
+      'url'          => $endpoint_proxy_swift,
+      'reverse_urls' => $endpoint_proxy_swift
+    },
+    ],
+
   }
 
   # We already use apache::vhost to generate our own

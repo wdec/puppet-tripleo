@@ -63,18 +63,45 @@
 #  Minimum amount of time before partitions can be moved.
 #  Defaults to undef
 #
+# [*swift_ring_get_tempurl*]
+# GET tempurl to fetch Swift rings from
+#
+# [*swift_ring_put_tempurl*]
+# PUT tempurl to upload Swift rings to
+#
+# [*skip_consistency_check*]
+# If set to true, skip the recon check to ensure rings are identical on all
+# nodes. Defaults to false
+#
 class tripleo::profile::base::swift::ringbuilder (
   $replicas,
   $build_ring  = true,
   $devices     = undef,
-  $step        = hiera('step'),
+  $step        = Integer(hiera('step')),
   $swift_zones = '1',
   $raw_disk_prefix = 'r1z1-',
   $raw_disks = [],
   $swift_storage_node_ips = hiera('swift_storage_node_ips', []),
   $part_power = undef,
   $min_part_hours = undef,
+  $swift_ring_get_tempurl = hiera('swift_ring_get_tempurl', ''),
+  $swift_ring_put_tempurl = hiera('swift_ring_put_tempurl', ''),
+  $skip_consistency_check = false,
 ) {
+
+  if $step >= 2 and $swift_ring_get_tempurl != '' {
+    exec{'fetch_swift_ring_tarball':
+      path    => ['/usr/bin'],
+      command => "curl --insecure --silent '${swift_ring_get_tempurl}' -o /tmp/swift-rings.tar.gz",
+      returns => [0, 3]
+    }
+    ~> exec{'extract_swift_ring_tarball':
+      path    => ['/bin'],
+      command => 'tar xzf /tmp/swift-rings.tar.gz -C /',
+      returns => [0, 2]
+    }
+  }
+
   if $step >= 2 {
     # pre-install swift here so we can build rings
     include ::swift
@@ -95,21 +122,48 @@ class tripleo::profile::base::swift::ringbuilder (
         part_power     => $part_power,
         replicas       => min(count($device_array), $replicas),
         min_part_hours => $min_part_hours,
-      } ->
+      }
 
       # add all other devices
-      tripleo::profile::base::swift::add_devices {$device_array:
+      -> tripleo::profile::base::swift::add_devices {$device_array:
         swift_zones => $swift_zones,
-      } ->
+      }
 
       # rebalance
-      swift::ringbuilder::rebalance{ ['object', 'account', 'container']:
+      -> swift::ringbuilder::rebalance{ ['object', 'account', 'container']:
         seed => '999',
       }
 
       Ring_object_device<| |> ~> Exec['rebalance_object']
-      Ring_object_device<| |> ~> Exec['rebalance_account']
-      Ring_object_device<| |> ~> Exec['rebalance_container']
+      Ring_account_device<| |> ~> Exec['rebalance_account']
+      Ring_container_device<| |> ~> Exec['rebalance_container']
     }
+  }
+
+  if $step >= 5 and $build_ring and $swift_ring_put_tempurl != '' {
+    if $skip_consistency_check {
+      exec{'create_swift_ring_tarball':
+        path    => ['/bin', '/usr/bin'],
+        command => 'tar cvzf /tmp/swift-rings.tar.gz /etc/swift/*.builder /etc/swift/*.ring.gz /etc/swift/backups/',
+      }
+    } else {
+      exec{'create_swift_ring_tarball':
+        path    => ['/bin', '/usr/bin'],
+        command => 'tar cvzf /tmp/swift-rings.tar.gz /etc/swift/*.builder /etc/swift/*.ring.gz /etc/swift/backups/',
+        unless  => 'swift-recon --md5 | grep -q "doesn\'t match"',
+      }
+    }
+    exec{'upload_swift_ring_tarball':
+      path        => ['/usr/bin'],
+      command     => "curl --insecure --silent -X PUT '${$swift_ring_put_tempurl}' --data-binary @/tmp/swift-rings.tar.gz",
+      require     => Exec['create_swift_ring_tarball'],
+      refreshonly => true,
+    }
+
+    Exec['rebalance_account'] ~> Exec['create_swift_ring_tarball']
+    Exec['rebalance_container'] ~> Exec['create_swift_ring_tarball']
+    Exec['rebalance_object'] ~> Exec['create_swift_ring_tarball']
+
+    Exec['create_swift_ring_tarball'] ~> Exec['upload_swift_ring_tarball']
   }
 }

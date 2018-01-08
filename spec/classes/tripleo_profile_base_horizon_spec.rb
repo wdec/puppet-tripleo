@@ -19,7 +19,7 @@ require 'spec_helper'
 describe 'tripleo::profile::base::horizon' do
   shared_examples_for 'tripleo::profile::base::horizon' do
     let(:pre_condition) do
-      "class { '::tripleo::profile::base::aodh': step => #{params[:step]} }"
+      "class { '::tripleo::profile::base::aodh': step => #{params[:step]}, oslomsg_rpc_hosts => ['localhost.localdomain'] }"
     end
 
     context 'with step less than 3' do
@@ -31,9 +31,35 @@ describe 'tripleo::profile::base::horizon' do
       end
     end
 
-    context 'with step 3' do
+    context 'with step 3 and not bootstrap' do
       let(:params) { {
         :step => 3,
+      } }
+
+      it 'should not configure anything' do
+        is_expected.to_not contain_class('horizon')
+        is_expected.to_not contain_class('apache::mod::remoteip')
+        is_expected.to_not contain_class('apache::mod::status')
+      end
+    end
+
+    context 'with step 3 and bootstrap' do
+      let(:params) { {
+        :step           => 3,
+        :bootstrap_node => 'node.example.com'
+      } }
+
+      it 'should trigger complete configuration' do
+        is_expected.to contain_class('horizon')
+        is_expected.to contain_class('apache::mod::remoteip')
+        is_expected.to contain_class('apache::mod::status')
+      end
+    end
+
+    context 'with step 4' do
+      let(:params) { {
+        :step           => 3,
+        :bootstrap_node => 'node.example.com'
       } }
 
       it 'should trigger complete configuration' do

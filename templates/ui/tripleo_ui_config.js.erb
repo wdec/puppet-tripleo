@@ -1,14 +1,27 @@
 window.tripleOUiConfig = {
-  "keystone": "<%= @keystone_url %>",
-
-  // The UI automatically discovers below URLs by querying keystone but can be
-  // changed here if desired.
-  //"heat": "<%= @heat_url %>",
-  //"ironic": "<%= @ironic_url %>",
-  //"mistral": "<%= @mistral_url %>",
-  //"swift": "<%= @swift_url %>",
-  //"zaqar-websocket": "<%= @zaqar_websocket_url %>",
+  // Service URLs (defaults to UI host)
+  //
+  // A valid Keystone service URL is required. The other endpoints
+  // will then be obtained automatically from the Keystone catalog.
+  //
+  'keystone': '<%= @endpoint_config_keystone %>',
+  'heat': '<%= @endpoint_config_heat %>',
+  'ironic': '<%= @endpoint_config_ironic %>',
+  'ironic-inspector': '<%= @endpoint_config_ironic_inspector %>',
+  'mistral': '<%= @endpoint_config_mistral %>',
+  'swift': '<%= @endpoint_config_swift %>',
+  'zaqar-websocket': '<%= @endpoint_config_zaqar %>',
 
   // Default websocket queue name
-  "zaqar_default_queue": "<%= @zaqar_default_queue %>"
+  'zaqar_default_queue': '<%= @zaqar_default_queue %>',
+
+  // Languages
+  //
+  // By default, all available languages are enabled.  Use this setting to
+  // disable certain languages.
+  //
+  'excludedLanguages': <%= @excluded_languages.to_json %>,
+
+  // Logging
+  'loggers': <%= @enabled_loggers.to_json %>
 };

@@ -24,33 +24,12 @@
 #   Defaults to hiera('step')
 #
 class tripleo::profile::base::nova::compute::libvirt (
-  $step = hiera('step'),
+  $step = Integer(hiera('step')),
 ) {
   if $step >= 4 {
     include ::tripleo::profile::base::nova::compute
-
-    # Ceph + Libvirt
-    $rbd_ephemeral_storage = hiera('nova::compute::rbd::ephemeral_storage', false)
-    $rbd_persistent_storage = hiera('rbd_persistent_storage', false)
-    if $rbd_ephemeral_storage or $rbd_persistent_storage {
-      $client_keys = hiera('ceph::profile::params::client_keys')
-      $client_user = join(['client.', hiera('nova::compute::rbd::libvirt_rbd_user')])
-      class { '::nova::compute::rbd':
-        libvirt_rbd_secret_key => $client_keys[$client_user]['secret'],
-      }
-    }
-
-    if $rbd_ephemeral_storage {
-      class { '::nova::compute::libvirt':
-        libvirt_disk_cachemodes => ['network=writeback'],
-        libvirt_hw_disk_discard => 'unmap',
-      }
-    } else {
-      include ::nova::compute::libvirt
-    }
-
-    include ::nova::compute::libvirt::qemu
-
+    include ::tripleo::profile::base::nova::migration::client
   }
+  include ::tripleo::profile::base::nova::compute_libvirt_shared
 
 }
