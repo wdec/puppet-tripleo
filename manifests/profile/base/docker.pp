@@ -35,6 +35,12 @@
 #   https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/7.2_Release_Notes/technology-preview-file_systems.html
 #   Defaults to '--log-driver=journald --signature-verification=false --iptables=false'
 #
+# [*configure_network*]
+#   Boolean. Whether to configure the docker network. Defaults to false.
+#
+# [*network_options*]
+#   Network options to configure. Defaults to ''
+#
 # [*configure_storage*]
 #   Boolean. Whether to configure a docker storage backend. Defaults to true.
 #
@@ -68,6 +74,8 @@ class tripleo::profile::base::docker (
   $insecure_registries = undef,
   $registry_mirror     = false,
   $docker_options      = '--log-driver=journald --signature-verification=false --iptables=false',
+  $configure_network   = false,
+  $network_options     = '',
   $configure_storage   = true,
   $storage_options     = '-s overlay2',
   $step                = Integer(hiera('step')),
@@ -81,6 +89,22 @@ class tripleo::profile::base::docker (
   if $step >= 1 {
     package {'docker':
       ensure => installed,
+    }
+
+    $docker_unit_override="[Service]\nMountFlags=\n"
+
+    file {'/etc/systemd/system/docker.service.d':
+      ensure  => directory,
+      require => Package['docker'],
+    }
+    -> file {'/etc/systemd/system/docker.service.d/99-unset-mountflags.conf':
+      content => $docker_unit_override,
+    }
+    ~> exec { 'systemd daemon-reload':
+      command     => 'systemctl daemon-reload',
+      path        => ['/usr/bin', '/usr/sbin'],
+      refreshonly => true,
+      notify      => Service['docker']
     }
 
     service { 'docker':
@@ -170,6 +194,23 @@ class tripleo::profile::base::docker (
       lens    => 'Shellvars.lns',
       incl    => '/etc/sysconfig/docker-storage',
       changes => $storage_changes,
+      notify  => Service['docker'],
+      require => Package['docker'],
+    }
+
+    if $configure_network {
+      if $network_options == undef {
+        fail('You must provide a $network_options in order to configure network')
+      }
+      $network_changes = [ "set DOCKER_NETWORK_OPTIONS '\" ${network_options}\"'", ]
+    } else {
+      $network_changes = [ 'rm DOCKER_NETWORK_OPTIONS', ]
+    }
+
+    augeas { 'docker-sysconfig-network':
+      lens    => 'Shellvars.lns',
+      incl    => '/etc/sysconfig/docker-network',
+      changes => $network_changes,
       notify  => Service['docker'],
       require => Package['docker'],
     }
