@@ -12,7 +12,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 #
-# == Class: tripleo::profile::base::neutron::plugins::ml2::vts
+# == Class: tripleo::profile::base::cisco_vpfa
 #
 # Cisco VPFA profile for TripleO
 #
