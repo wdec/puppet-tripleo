@@ -49,7 +49,7 @@ class tripleo::profile::base::collectd (
       }
     }
 
-    # Get the configs for earch plugin
+    # Get the configs for each plugin
     # The code is a basic key iteraton routine workaround due to puppet 3 not having an iterator.
     $plugin_names = keys($configs)
 
@@ -57,9 +57,6 @@ class tripleo::profile::base::collectd (
         tripleo::collectd::plugins { $plugin_names:
         configs => $configs
       }
-    }
-    else {
-      include ::collectd
     }
 
     define tripleo::collectd::plugins ($configs) {
@@ -69,6 +66,10 @@ class tripleo::profile::base::collectd (
       collectd::plugin { $name:
         content => join($config["content"], "\n"),
       }
+    }
+
+    if $step >= 4 {
+      include ::collectd
     }
   }
 

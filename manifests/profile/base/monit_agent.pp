@@ -20,15 +20,45 @@
 #
 # === Parameters
 #
+# [*allow*]
+#   (Optional) Monit allow statement array.
+#
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
 #   for more details.
 #   Defaults to hiera('step')
 #
+# [*password*]
+#   (Optional) The monit password
+#
+# [*user*]
+#   (Optional) The monit username
+#
+
 class tripleo::profile::base::monit_agent (
-  $step        = (hiera('step')),
+  $step         = hiera('step'),
+  $user         = hiera('tripleo::monit_agent::user', ''),
+  $password     = hiera('tripleo::monit_agent::password'),
+  $allow        = hiera('tripleo::monit::allow', [])
 ) {
+
+  if !empty($user) {
+    if hiera('monit::httpserver_ssl') {
+      class { '::monit':
+        httpserver_allow => concat(any2array("@${user} read-only"), $allow)
+      }
+    }
+    else {
+      $user_pass = any2array("${user}:${password}")
+      class { '::monit':
+        httpserver_allow => concat($user_pass, $allow)
+      }
+    }
+  }
+
+# Include monit after other services
   if $step > 4 {
     include ::monit
   }
+
 }
