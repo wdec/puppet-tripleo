@@ -39,26 +39,53 @@ class tripleo::profile::base::monit_agent (
   $step         = hiera('step'),
   $user         = hiera('tripleo::monit_agent::user', ''),
   $password     = hiera('tripleo::monit_agent::password'),
-  $allow        = hiera('tripleo::monit::allow', [])
+  $allow        = hiera('tripleo::monit::allow', []),
 ) {
 
-  if !empty($user) {
-    if hiera('monit::httpserver_ssl') {
-      class { '::monit':
-        httpserver_allow => concat(any2array("@${user} read-only"), $allow)
+  # Fix for issue with puppet module. Purge the Fedora default config
+  $conf_file    = hiera('monit::conf_file', '/etc/monitrc')
+
+  if hiera('monit::conf_purge', true) {
+    exec {"/bin/rm -rf ${conf_file}":
+    }
+  }
+
+  # Include monit after other services
+  if $step > 4 {
+    exec { 'fixup config':
+      command => "/bin/touch ${conf_file}; chmod 0700 ${conf_file}",
+      before  => Class['monit'],
+    }
+
+    if !empty($user) {
+      # Create PAM authentication with SSL
+      if hiera('monit::httpserver_ssl') {
+        group { 'monit-ro':
+          ensure => 'present',
+        }
+        user { "$user":
+          ensure   => 'present',
+          gid      => 'monit-ro',
+          shell    => '/usr/sbin/nologin',
+          password => pw_hash("$password", 'SHA-512', fqdn_rand_string(10)),
+        }
+        class { '::monit':
+          httpserver_allow => concat(any2array("@${user} read-only"), $allow),
+          # Fix issue with puppet module not correctly defining the config files for Rhel
+          conf_file => '/etc/monitrc',
+        }
+      }
+      else {
+        $user_pass = any2array("${user}:${password}")
+        class { '::monit':
+          httpserver_allow => concat($user_pass, $allow),
+          conf_file => '/etc/monitrc',
+        }
       }
     }
     else {
-      $user_pass = any2array("${user}:${password}")
-      class { '::monit':
-        httpserver_allow => concat($user_pass, $allow)
-      }
+      include ::monit
     }
   }
-
-# Include monit after other services
-  if $step > 4 {
-    include ::monit
-  }
-
 }
+
