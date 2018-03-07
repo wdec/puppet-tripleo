@@ -20,9 +20,6 @@
 #
 # === Parameters
 #
-# [*allow*]
-#   (Optional) Monit allow statement array.
-#
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
 #   for more details.
@@ -34,12 +31,18 @@
 # [*user*]
 #   (Optional) The monit username
 #
+# [*allow*]
+#   (Optional) Monit allow statement array.
+#
+# [*raw_config*]
+#   (Optional) String containing raw monit configuration.
 
 class tripleo::profile::base::monit_agent (
   $step         = hiera('step'),
   $user         = hiera('tripleo::monit_agent::user', ''),
   $password     = hiera('tripleo::monit_agent::password'),
   $allow        = hiera('tripleo::monit::allow', []),
+  $raw_config   = hiera('tripleo::monit::raw_config', ''),
 ) {
 
   # Fix for issue with puppet module. Purge the Fedora default config
@@ -55,6 +58,14 @@ class tripleo::profile::base::monit_agent (
     exec { 'fixup config':
       command => "/bin/touch ${conf_file}; chmod 0700 ${conf_file}",
       before  => Class['monit'],
+    }
+
+    if !empty($raw_config) {
+      file {'/etc/monit.d/20-raw_config':
+        ensure  => present,
+        content => sprintf("# TRIPLEO PUPPET MANAGED!!\n %s", $raw_config),
+        notify  => Class['monit'],
+      }
     }
 
     if !empty($user) {
