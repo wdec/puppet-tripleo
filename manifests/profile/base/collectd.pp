@@ -41,34 +41,24 @@ class tripleo::profile::base::collectd (
   $step         = hiera('step'),
 )
   {
-    if $purge {
-      class { '::collectd':
-        purge           => true,
-        recurse         => true,
-        purge_config    => true,
-      }
-    }
-
-    # Get the configs for each plugin
-    # The code is a basic key iteraton routine workaround due to puppet 3 not having an iterator.
-    $plugin_names = keys($configs)
-
-    if !empty($plugin_names) {
-        tripleo::collectd::plugins { $plugin_names:
-        configs => $configs
-      }
-    }
-
-    define tripleo::collectd::plugins ($configs) {
-      # Name will take the value of each entry for the plugin_names
-      $config = $configs[$name]
-
-      collectd::plugin { $name:
-        content => join($config["content"], "\n"),
-      }
-    }
-
     if $step >= 4 {
+      if $purge {
+        class { '::collectd':
+          purge        => true,
+          recurse      => true,
+          purge_config => true,
+        }
+      }
+
+      # Get the configs for each plugin. Work only with Puppet 4!
+      if !empty($configs) {
+        $configs.each | $name, $config | {
+          collectd::plugin { $name:
+            content => join($config["content"], "\n"),
+          }
+        }
+      }
+
       include ::collectd
     }
   }

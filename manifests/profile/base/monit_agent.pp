@@ -48,7 +48,7 @@ class tripleo::profile::base::monit_agent (
   # Fix for issue with puppet module. Purge the Fedora default config
   $conf_file    = hiera('monit::conf_file', '/etc/monitrc')
 
-  if hiera('monit::conf_purge', true) {
+  if hiera('monit::conf_purge', true) and $step == 3 {
     exec {"/bin/rm -rf ${conf_file}":
     }
   }
@@ -83,20 +83,18 @@ class tripleo::profile::base::monit_agent (
         class { '::monit':
           httpserver_allow => concat(any2array("@${user} read-only"), $allow),
           # Fix issue with puppet module not correctly defining the config files for Rhel
-          conf_file => '/etc/monitrc',
+          conf_file => $conf_file,
         }
       }
       else {
         $user_pass = any2array("${user}:${password}")
         class { '::monit':
           httpserver_allow => concat($user_pass, $allow),
-          conf_file => '/etc/monitrc',
+          conf_file => $conf_file,
         }
       }
     }
-    else {
-      include ::monit
-    }
+    include ::monit
   }
 }
 
