@@ -37,19 +37,43 @@
 # [*vpfa_ip1_mask*]
 #   VPFA's IP subnet LENGTH. Eg 24
 #
+# [*vtsr_ip_address_list*]
+#   VTSR IP addresses
+#
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
 #   for more details.
 #   Defaults to hiera('step')
 #
 class tripleo::profile::base::cisco_vpfa (
-  $vts_url_ip   = hiera('vts::vts_ip'),
-  $vts_port     = hiera('vts::vts_port'),
-  $vpfa_hostname = hiera('cisco_vpfa::vpfa_hostname', $::hostname),
-  $vpfa_ip1 = hiera('cisco_vpfa::vtf_underlay_ip_v4', undef),
-  $vpfa_ip1_mask = hiera('cisco_vpfa::vtf_underlay_mask_v4', undef),
-  $step         = hiera('step'),
+  $vts_url_ip     = hiera('vts::vts_ip'),
+  $vts_port       = hiera('vts::vts_port', '8888'),
+  $vpfa_hostname  = hiera('cisco_vpfa::vpfa_hostname', $::hostname),
+  $vpfa_ip1       = hiera('cisco_vpfa::vtf_underlay_ip_v4', undef),
+  $vpfa_ip1_mask  = hiera('cisco_vpfa::vtf_underlay_mask_v4', undef),
+  $vtsr_addresses = hiera('cisco_vpfa::vtsr_ip_address_list', []),
+  $step           = hiera('step'),
 ) {
+
+  # Workaround for puppet firewall module limitation for rules with multiple IPs
+  # The code is a basic key iteraton routine workaround due to puppet 3 not having an iterator.
+
+  if !empty($vtsr_addresses) {
+    tripleo::vpfa::firewall::service_rule { $vtsr_addresses: }
+  }
+
+  define tripleo::vpfa::firewall::service_rule {
+    # Each IP address will be concatenated to the name of the rule
+
+    create_resources('firewall', {
+      "255_cisco_vpfa_$name" => {
+        dport  => [21345, 55555],
+        source => $name,
+        proto  => tcp,
+        action => accept,
+      }
+    })
+  }
 
   if $step >= 4 {
     if ! $vts_url_ip { fail('VTS IP is Empty') }
@@ -83,7 +107,7 @@ class tripleo::profile::base::cisco_vpfa (
   }
 
     class { '::cisco_vpfa':
-      vts_registration_api      => "https://${vts_url_ip_out}:${vts_port}/api/running/cisco-vts/vtfs/vtf",
+      vts_registration_api => "https://${vts_url_ip_out}:${vts_port}/api/running/cisco-vts/vtfs/vtf",
       vts_address => $vts_url_ip_out,
       vpfa_hostname => $vpfa_hostname,
       network_ipv4_address => $vpfa_ip1,
