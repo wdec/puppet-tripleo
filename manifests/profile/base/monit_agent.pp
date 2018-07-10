@@ -36,7 +36,7 @@
 
 class tripleo::profile::base::monit_agent (
   $step         = hiera('step'),
-  $user         = hiera('monit::httpd_user', ''),
+  $user         = hiera('monit::httpd_user'),
   $password     = hiera('monit::httpd_password', ''),
   $raw_config   = hiera('tripleo::monit::raw_config', ''),
 ) {
