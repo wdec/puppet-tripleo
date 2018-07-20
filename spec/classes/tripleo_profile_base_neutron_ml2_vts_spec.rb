@@ -18,12 +18,13 @@ require 'spec_helper'
 
 describe 'tripleo::profile::base::neutron::plugins::ml2::vts' do
   let :params do
-    { :step                    => 4
+    { :step                    => 4,
+      :vts_siteid              => "1",
     }
   end
   shared_examples_for 'tripleo::profile::base::neutron::plugins::ml2::vts' do
     before :each do
-      facts.merge!({ :step => params[:step] })
+      facts.merge!({ :step => params[:step] , :vts_siteid => params[:vts_siteid]})
     end
 
     context 'with IPv4 address' do
@@ -54,6 +55,20 @@ describe 'tripleo::profile::base::neutron::plugins::ml2::vts' do
       end
     end
 
+
+    context 'with ip but without site id' do
+      before do
+        params.merge!({
+                          :vts_url_ip => '192.0.2.5',
+                          :vts_siteid => nil
+                      })
+        end
+        it 'should not configure vts ml2 plugin' do
+          is_expected.not_to contain_class('neutron::plugins::ml2::cisco::vts')
+        end
+      end
+
+
     context 'with VTS IPv4 and port 9999' do
       before do
         params.merge!({
@@ -63,7 +78,7 @@ describe 'tripleo::profile::base::neutron::plugins::ml2::vts' do
       end
       it 'should contain VTS URL with port 9999' do
         is_expected.to contain_class('neutron::plugins::ml2::cisco::vts').with(
-            :vts_url => "https://192.0.2.5:9999/api/running/openstack"
+            :vts_url => "https://192.0.2.5:9999/api/running/vts-service/sites/site/1/cisco-vts/vmms/vmm"
 
         )
       end
@@ -78,7 +93,7 @@ describe 'tripleo::profile::base::neutron::plugins::ml2::vts' do
       end
       it 'should contain VTS URL with port 9999' do
         is_expected.to contain_class('neutron::plugins::ml2::cisco::vts').with(
-            :vts_url => "https://[2001:15:dead::1]:9999/api/running/openstack"
+            :vts_url => "https://[2001:15:dead::1]:9999/api/running/vts-service/sites/site/1/cisco-vts/vmms/vmm"
 
         )
       end

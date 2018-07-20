@@ -22,6 +22,9 @@
 #   (Optional) IP address for VTS Api Service
 #   Defaults to hiera('vts_ip')
 #
+# [*vts_siteid*]
+#   VTS Site ID of the controller
+#
 # [*vts_port*]
 #   (Optional) Virtual Machine Manager ID for VTS
 #   Defaults to '8888'
@@ -33,6 +36,7 @@
 #
 class tripleo::profile::base::neutron::cisco_vts_agent(
   $vts_url_ip   = hiera('vts::vts_ip'),
+  $vts_siteid   = hiera('vts::vts_siteid'),
   $vts_port     = hiera('vts::vts_port', 8888),
   $step         = Integer(hiera('step')),
 ) {
@@ -43,7 +47,7 @@ class tripleo::profile::base::neutron::cisco_vts_agent(
     $vts_url_ip_out = normalize_ip_for_uri($vts_url_ip)
 
     class { '::neutron::agents::ml2::cisco_vts_agent':
-      vts_url => "https://${vts_url_ip_out}:${vts_port}/api/running/openstack"
+      vts_url => "https://${vts_url_ip_out}:${vts_port}/api/running/vts-service/sites/site/${vts_siteid}/cisco-vts/vmms/vmm"
     }
 
     # Optional since manage_service may be false and neutron server may not be colocated.

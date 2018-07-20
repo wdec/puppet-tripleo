@@ -1,4 +1,4 @@
-# Copyright 2017 Cisco, Inc.
+# Copyright 2017-2018 Cisco, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -27,6 +27,9 @@
 #   Virtual Machine Manager ID for VTS
 #   Defaults to '8888'
 #
+# [*vts_siteid*]
+#   VTS Site ID of the controller
+#
 # [*vpfa_hostname*]
 #   (Optional) Hostname to represent the VPFA.
 #   Defaults to the host's hostname if not overriden by user config.
@@ -48,6 +51,7 @@
 class tripleo::profile::base::cisco_vpfa (
   $vts_url_ip     = hiera('vts::vts_ip'),
   $vts_port       = hiera('vts::vts_port', '8888'),
+  $vts_siteid     = hiera('vts::vts_siteid'),
   $vpfa_hostname  = hiera('cisco_vpfa::vpfa_hostname', $::hostname),
   $vpfa_ip1       = hiera('cisco_vpfa::vtf_underlay_ip_v4', undef),
   $vpfa_ip1_mask  = hiera('cisco_vpfa::vtf_underlay_mask_v4', undef),
@@ -74,7 +78,8 @@ class tripleo::profile::base::cisco_vpfa (
   }
 
   if $step >= 4 {
-    if ! $vts_url_ip { fail('VTS IP is Empty') }
+    if empty($vts_url_ip) { fail('VTS IP is Empty') }
+    if empty($vts_siteid) { fail('VTS Site ID is empty') }
 
   if is_ipv6_address($vts_url_ip) {
     $vts_url_ip_out = enclose_ipv6($vts_url_ip)
@@ -105,7 +110,7 @@ class tripleo::profile::base::cisco_vpfa (
   }
 
     class { '::cisco_vpfa':
-      vts_registration_api      => "https://${vts_url_ip_out}:${vts_port}/api/running/cisco-vts/vtfs/vtf",
+      vts_registration_api => "https://${vts_url_ip_out}:${vts_port}/api/running/vts-service/sites/site/${vts_siteid}/cisco-vts/vtfs/vtf",
       vts_address => $vts_url_ip_out,
       vpfa_hostname => $vpfa_hostname,
       network_ipv4_address => $vpfa_ip1,
