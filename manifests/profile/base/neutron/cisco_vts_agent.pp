@@ -47,7 +47,7 @@ class tripleo::profile::base::neutron::cisco_vts_agent(
     $vts_url_ip_out = normalize_ip_for_uri($vts_url_ip)
 
     class { '::neutron::agents::ml2::cisco_vts_agent':
-      vts_url => "https://${vts_url_ip_out}:${vts_port}/api/running/vts-service/sites/site/${vts_siteid}/cisco-vts/vmms/vmm"
+      vts_url => "https://${vts_url_ip_out}:${vts_port}/api/running/vts-service/sites/site/${vts_siteid}/openstack"
     }
 
     # Optional since manage_service may be false and neutron server may not be colocated.
