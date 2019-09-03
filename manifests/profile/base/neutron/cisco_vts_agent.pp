@@ -1,4 +1,4 @@
-# Copyright 2017-2018 Cisco, Inc.
+# Copyright 2017 Cisco, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -12,21 +12,21 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 #
-# == Class: tripleo::profile::base::neutron::plugins::ml2::vts
+# == Class: tripleo::profile::base::neutron::cisco_vts_agent
 #
-# Cisco VTS Controller Neutron ML2 plugin profile for TripleO
+# Neutron Cisco VTS Agent profile for tripleo
 #
 # === Parameters
 #
-#
 # [*vts_ip*]
-#   IP address for VTS Api Service
+#   (Optional) IP address for VTS Api Service
+#   Defaults to hiera('vts_ip')
 #
 # [*vts_siteid*]
 #   VTS Site ID of the controller
 #
 # [*vts_port*]
-#   (Optional) VTS Server Neutron service port
+#   (Optional) Virtual Machine Manager ID for VTS
 #   Defaults to '8888'
 #
 # [*step*]
@@ -34,21 +34,24 @@
 #   for more details.
 #   Defaults to hiera('step')
 #
-class tripleo::profile::base::neutron::plugins::ml2::vts (
+class tripleo::profile::base::neutron::cisco_vts_agent(
   $vts_url_ip   = hiera('vts::vts_ip'),
   $vts_siteid   = hiera('vts::vts_siteid'),
   $vts_port     = hiera('vts::vts_port', 8888),
-  $step         = hiera('step'),
+  $step         = Integer(hiera('step')),
 ) {
+  include ::tripleo::profile::base::neutron
 
   if $step >= 4 {
 
-    if !empty($vts_url_ip) and !empty($vts_siteid) {
-      $vts_url_ip_out = normalize_ip_for_uri($vts_url_ip)
+    $vts_url_ip_out = normalize_ip_for_uri($vts_url_ip)
 
-      class { '::neutron::plugins::ml2::cisco::vts':
-        vts_url => "https://${vts_url_ip_out}:${vts_port}/restconf/data/vts-service/sites/site=${vts_siteid}/openstack"
-      }
+    class { '::neutron::agents::ml2::cisco_vts_agent':
+      vts_url => "https://${vts_url_ip_out}:${vts_port}/api/running/vts-service/sites/site/${vts_siteid}/openstack"
     }
+
+    # Optional since manage_service may be false and neutron server may not be colocated.
+    Service<| title == 'neutron-server' |> -> Service<| title == 'neutron-vts-agent' |>
   }
+
 }
