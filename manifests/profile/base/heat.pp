@@ -20,15 +20,11 @@
 #
 # [*bootstrap_node*]
 #   (Optional) The hostname of the node responsible for bootstrapping tasks
-#   Defaults to downcase(hiera('bootstrap_nodeid'))
+#   Defaults to downcase(hiera('heat_engine_short_bootstrap_node_name'))
 #
 # [*manage_db_purge*]
 #   (Optional) Whether keystone token flushing should be enabled
 #   Defaults to hiera('keystone_enable_db_purge', true)
-#
-# [*notification_driver*]
-#   (Optional) Heat notification driver to use.
-#   Defaults to 'messaging'
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
@@ -80,9 +76,8 @@
 #   Defaults to hiera('heat::rabbit_use_ssl', '0')
 
 class tripleo::profile::base::heat (
-  $bootstrap_node          = downcase(hiera('bootstrap_nodeid')),
+  $bootstrap_node          = downcase(hiera('heat_engine_short_bootstrap_node_name')),
   $manage_db_purge         = hiera('heat_enable_db_purge', true),
-  $notification_driver     = 'messaging',
   $step                    = Integer(hiera('step')),
   $oslomsg_rpc_proto       = hiera('messaging_rpc_service_name', 'rabbit'),
   $oslomsg_rpc_hosts       = any2array(hiera('rabbitmq_node_names', undef)),
@@ -108,7 +103,6 @@ class tripleo::profile::base::heat (
     $oslomsg_use_ssl_real = sprintf('%s', bool2num(str2bool($oslomsg_use_ssl)))
 
     class { '::heat' :
-      notification_driver        => $notification_driver,
       default_transport_url      => os_transport_url({
         'transport' => $oslomsg_rpc_proto,
         'hosts'     => $oslomsg_rpc_hosts,

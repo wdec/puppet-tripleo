@@ -25,7 +25,7 @@
 #
 # [*bootstrap_node*]
 #   (Optional) The hostname of the node responsible for bootstrapping tasks
-#   Defaults to hiera('bootstrap_nodeid')
+#   Defaults to hiera('keystone_short_bootstrap_node_name')
 #
 # [*certificates_specs*]
 #   (Optional) The specifications to give to certmonger for the certificate(s)
@@ -144,7 +144,7 @@
 #
 class tripleo::profile::base::keystone (
   $admin_endpoint_network         = hiera('keystone_admin_api_network', undef),
-  $bootstrap_node                 = hiera('bootstrap_nodeid', undef),
+  $bootstrap_node                 = hiera('keystone_short_bootstrap_node_name', undef),
   $certificates_specs             = hiera('apache_certificates_specs', {}),
   $enable_internal_tls            = hiera('enable_internal_tls', false),
   $heat_admin_domain              = undef,
@@ -288,6 +288,12 @@ class tripleo::profile::base::keystone (
     if $keystone_enable_member {
       keystone_role { '_member_':
         ensure => present,
+      }
+    }
+
+    if hiera('barbican_api_enabled', false) {
+      keystone_role { 'creator':
+        ensure => present
       }
     }
   }

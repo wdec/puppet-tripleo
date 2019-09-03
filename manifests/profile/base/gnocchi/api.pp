@@ -20,7 +20,7 @@
 #
 # [*bootstrap_node*]
 #   (Optional) The hostname of the node responsible for bootstrapping tasks
-#   Defaults to hiera('bootstrap_nodeid')
+#   Defaults to hiera('gnocchi_api_short_bootstrap_node_name')
 #
 # [*certificates_specs*]
 #   (Optional) The specifications to give to certmonger for the certificate(s)
@@ -69,7 +69,7 @@
 #   Defaults to hiera('incoming_storage_driver', undef)
 #
 class tripleo::profile::base::gnocchi::api (
-  $bootstrap_node                = hiera('bootstrap_nodeid', undef),
+  $bootstrap_node                = hiera('gnocchi_api_short_bootstrap_node_name', undef),
   $certificates_specs            = hiera('apache_certificates_specs', {}),
   $enable_internal_tls           = hiera('enable_internal_tls', false),
   $gnocchi_backend               = downcase(hiera('gnocchi_backend', 'swift')),
@@ -151,8 +151,14 @@ class tripleo::profile::base::gnocchi::api (
           command => "setfacl -m u:gnocchi:r-- /etc/ceph/ceph.client.${gnocchi_rbd_client_name}.keyring",
           unless  => "getfacl /etc/ceph/ceph.client.${gnocchi_rbd_client_name}.keyring | grep -q user:gnocchi:r--",
         }
+        -> exec{ "exec-setfacl-${gnocchi_rbd_client_name}-gnocchi-mask":
+          path    => ['/bin', '/usr/bin'],
+          command => "setfacl -m m::r /etc/ceph/ceph.client.${gnocchi_rbd_client_name}.keyring",
+          unless  => "getfacl /etc/ceph/ceph.client.${gnocchi_rbd_client_name}.keyring | grep -q mask::r",
+        }
         Ceph::Key<| title == "client.${gnocchi_rbd_client_name}" |> -> Exec["exec-setfacl-${gnocchi_rbd_client_name}-gnocchi"]
       }
+      's3': { include ::gnocchi::storage::s3 }
       default: { fail('Unrecognized gnocchi_backend parameter.') }
     }
   }

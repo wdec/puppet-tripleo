@@ -43,7 +43,7 @@ mod 'certmonger',
 
 mod 'ntp',
   :git => 'https://github.com/puppetlabs/puppetlabs-ntp',
-  :ref => '4.2.x'
+  :ref => '4.2.0'
 
 mod 'ptp',
   :git => 'https://github.com/redhat-nfvpe/ptp',
@@ -62,20 +62,21 @@ mod 'ssh',
   :git => 'https://github.com/saz/puppet-ssh',
   :ref => 'v3.0.1'
 
+# NOTE(aschultz): Pine due to LP#1800944
+# Also note, this matches the rdo package pin
 mod 'snmp',
-  :git => 'https://github.com/razorsedge/puppet-snmp',
-  :ref => 'master'
+  :git => 'https://github.com/voxpupuli/puppet-snmp',
+  :ref => '5d73485b9d0c42f8131fc0c761406ac8f0c88152'
 
 mod 'sensu',
   :git => 'https://github.com/sensu/sensu-puppet',
-  :ref => 'master'
+  :ref => 'aa0f9256ade05153c99f5eac8931da9eb1aaec1a'
 
 mod 'pacemaker',
   :git => 'https://github.com/openstack/puppet-pacemaker',
   :ref => 'master'
 
-# Note(bandini): Pinned due to LP#1756890
 mod 'collectd',
   :git => 'https://github.com/voxpupuli/puppet-collectd',
-  :ref => '93c8d0bd32bb5610652f30e785ba6644fc82a8b6'
+  :ref => 'master'
 

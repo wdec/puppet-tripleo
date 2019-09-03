@@ -20,7 +20,7 @@
 #
 # [*bootstrap_node*]
 #   (Optional) The hostname of the node responsible for bootstrapping tasks
-#   Defaults to hiera('manila_share_short_bootstrap_node_name')
+#   Defaults to hiera('ceph_nfs_short_bootstrap_node_name')
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
@@ -32,7 +32,7 @@
 #   Defaults to hiera('pcs_tries', 20)
 #
 class tripleo::profile::pacemaker::ceph_nfs (
-  $bootstrap_node          = hiera('manila_share_short_bootstrap_node_name'),
+  $bootstrap_node          = hiera('ceph_nfs_short_bootstrap_node_name'),
   $step                    = hiera('step'),
   $pcs_tries               = hiera('pcs_tries', 20),
 ) {
@@ -64,13 +64,18 @@ class tripleo::profile::pacemaker::ceph_nfs (
   }
 
   if $step >= 2 {
-    pacemaker::property { 'ceph-nfs-role-node-property':
-      property => 'ceph-nfs-role',
-      value    => true,
-      tries    => $pcs_tries,
-      node     => $::hostname,
-    }
     if $pacemaker_master {
+      # At step2 we only create the node property on master so that
+      # both VIP and (later at step5) ceph-nfs service can start on master
+      # node only. This way we can guarantee that the VIP and ceph-nfs are
+      # colocated. Later we expand the properties on all nodes where ceph_nfs
+      # is supposed to run.
+      pacemaker::property { 'ceph-nfs-role-node-property':
+        property => 'ceph-nfs-role',
+        value    => true,
+        tries    => $pcs_tries,
+        node     => $::hostname,
+      }
       pacemaker::resource::ip { 'ganesha_vip':
         ip_address    => $ganesha_vip,
         cidr_netmask  => $netmask,
@@ -116,9 +121,26 @@ class tripleo::profile::pacemaker::ceph_nfs (
       tag               => 'pacemaker_constraint',
     }
 
+    # See comment on pacemaker::property at step2
+    $ceph_nfs_short_node_names = hiera('ceph_nfs_short_node_names')
+    $ceph_nfs_short_node_names.each |String $node_name| {
+      # We only set the properties for the non-bootstrap nodes
+      # because we set the property for the bootstrap node at step 2
+      # already
+      if $node_name != $bootstrap_node {
+        pacemaker::property { "ceph-nfs-role-${node_name}":
+          property => 'ceph-nfs-role',
+          value    => true,
+          tries    => $pcs_tries,
+          node     => $node_name,
+        }
+      }
+    }
+
     Pacemaker::Resource::Ip['ganesha_vip']
       -> Pacemaker::Resource::Service['ceph-nfs']
         -> Pacemaker::Constraint::Order['ganesha_vip-then-ganesha']
           -> Pacemaker::Constraint::Colocation['ganesha_vip-with-ganesha']
+            -> Pacemaker::Property<||>
   }
 }

@@ -31,9 +31,14 @@
 #   (Optional) The CA that certmonger will use to generate the certificates.
 #   Defaults to hiera('certmonger_ca', 'local').
 #
+# [*dnsnames*]
+#   (Optional) The DNS names that will be added for the SubjectAltNames entry
+#   in the certificate. If left unset, the value will be set to the $hostname.
+#   This parameter can take both a string or an array of strings.
+#   Defaults to $hostname
+#
 # [*postsave_cmd*]
 #   (Optional) Specifies the command to execute after requesting a certificate.
-#   If nothing is given, it will default to: "systemctl restart ${service name}"
 #   Defaults to undef.
 #
 # [*principal*]
@@ -45,17 +50,25 @@ class tripleo::certmonger::redis (
   $service_certificate,
   $service_key,
   $certmonger_ca = hiera('certmonger_ca', 'local'),
+  $dnsnames      = $hostname,
   $postsave_cmd  = undef,
   $principal     = undef,
 ) {
   include ::certmonger
+
+  ensure_resource('file', '/usr/bin/certmonger-redis-refresh.sh', {
+    source  => 'puppet:///modules/tripleo/certmonger-redis-refresh.sh',
+    mode    => '0700',
+    seltype => 'bin_t',
+    notify  => Service['certmonger']
+  })
 
   certmonger_certificate { 'redis' :
     ensure       => 'present',
     certfile     => $service_certificate,
     keyfile      => $service_key,
     hostname     => $hostname,
-    dnsname      => $hostname,
+    dnsname      => $dnsnames,
     principal    => $principal,
     postsave_cmd => $postsave_cmd,
     ca           => $certmonger_ca,

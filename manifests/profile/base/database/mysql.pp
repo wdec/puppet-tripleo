@@ -24,7 +24,7 @@
 #
 # [*bootstrap_node*]
 #   (Optional) The hostname of the node responsible for bootstrapping tasks
-#   Defaults to hiera('bootstrap_nodeid')
+#   Defaults to hiera('mysql_short_bootstrap_node_name')
 #
 # [*certificate_specs*]
 #   (Optional) The specifications to give to certmonger for the certificate
@@ -56,6 +56,24 @@
 #   (Optional) Configure the size of the MySQL buffer pool.
 #   Defaults to hiera('innodb_buffer_pool_size', undef)
 #
+# [*innodb_log_file_size*]
+#   (Optional) Configure the size in bytes of each log file in a log group.
+#   Defaults to undef.
+#
+# [*innodb_flush_method*]
+#   (Optional) Defines the method used to flush data to InnoDB data files and log files.
+#   Defaults to undef.
+#
+# [*innodb_lock_wait_timeout*]
+#   (Option) Time in seconds that an InnoDB transaction waits for an InnoDB row lock (not table lock).
+#   When this occurs, the statement (not transaction) is rolled back.
+#   Defaults to undef.
+#
+# [*table_open_cache*]
+#   (Optional) Configure the number of open tables for all threads.
+#   Increasing this value increases the number of file descriptors that mysqld requires.
+#   Defaults to undef.
+#
 # [*manage_resources*]
 #   (Optional) Whether or not manage root user, root my.cnf, and service.
 #   Defaults to true
@@ -81,12 +99,16 @@
 #
 class tripleo::profile::base::database::mysql (
   $bind_address                  = $::hostname,
-  $bootstrap_node                = hiera('bootstrap_nodeid', undef),
+  $bootstrap_node                = hiera('mysql_short_bootstrap_node_name', undef),
   $certificate_specs             = {},
   $cipher_list                   = '!SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1',
   $enable_internal_tls           = hiera('enable_internal_tls', false),
   $generate_dropin_file_limit    = false,
   $innodb_buffer_pool_size       = hiera('innodb_buffer_pool_size', undef),
+  $innodb_log_file_size          = undef,
+  $innodb_lock_wait_timeout      = hiera('innodb_lock_wait_timeout', undef),
+  $table_open_cache              = undef,
+  $innodb_flush_method           = undef,
   $manage_resources              = true,
   $mysql_server_options          = {},
   $mysql_max_connections         = hiera('mysql_max_connections', undef),
@@ -141,6 +163,10 @@ class tripleo::profile::base::database::mysql (
         'open_files_limit'        => '-1',
         'innodb_buffer_pool_size' => $innodb_buffer_pool_size,
         'innodb_file_per_table'   => 'ON',
+        'innodb_log_file_size'    => $innodb_log_file_size,
+        'innodb_lock_wait_timeout'    => $innodb_lock_wait_timeout,
+        'table_open_cache'        => $table_open_cache,
+        'innodb_flush_method'     => $innodb_flush_method,
         'ssl'                     => $enable_internal_tls,
         'ssl-key'                 => $tls_keyfile,
         'ssl-cert'                => $tls_certfile,

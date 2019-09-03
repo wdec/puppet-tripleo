@@ -1,12 +1,27 @@
 - project:
     templates:
-      - puppet-openstack-check-jobs
-      - puppet-openstack-module-unit-jobs
       - tripleo-undercloud-jobs
       - tripleo-multinode-baremetal-minimal
       - tripleo-multinode-container-minimal
+      - release-notes-jobs
     check:
       jobs:
+        - puppet-openstack-lint
+        - puppet-openstack-syntax-4
+        - puppet-openstack-unit-4.8-centos-7
+        - tripleo-ci-centos-7-scenario000-multinode-oooq-container-updates:
+            files:
+              - ^manifests/haproxy.*$
+              - ^manifests/profile/(base|pacemaker)/aodh.*$
+              - ^manifests/profile/(base|pacemaker)/ceilometer.*$
+              - ^manifests/profile/(base|pacemaker)/ceph.*$
+              - ^manifests/profile/(base|pacemaker)/cinder.*$
+              - ^manifests/profile/(base|pacemaker)/glance.*$
+              - ^manifests/profile/(base|pacemaker)/gnocchi.*$
+              - ^manifests/profile/(base|pacemaker)/logging.*$
+              - ^manifests/profile/(base|pacemaker)/metrics.*$
+              - ^manifests/profile/(base|pacemaker)/monitoring.*$
+              - ^manifests/profile/(base|pacemaker)/panko.*$
         - tripleo-ci-centos-7-scenario001-multinode-oooq-container:
             files:
               - ^manifests/haproxy.*$
@@ -53,10 +68,21 @@
               - ^manifests/profile/(base|pacemaker)/neutron/ovn.*$
               - ^manifests/profile/(base|pacemaker)/congress.*$
               - ^manifests/profile/(base|pacemaker)/tacker.*$
+        - tripleo-ci-centos-7-scenario008-multinode-oooq-container:
+            files:
+              - ^manifests/haproxy.*$
+              - ^manifests/profile/(base|pacemaker)/neutron/ml2.pp$
+              - ^manifests/profile/(base|pacemaker)/neutron/plugins/ml2/opendaylight.*$
+              - ^manifests/profile/(base|pacemaker)/neutron/plugins/ovs/opendaylight.*$
+              - ^manifests/profile/(base|pacemaker)/neutron/opendaylight.*$
+              - ^lib/puppet/functions/.*odl.*$
     gate:
       queue: tripleo
       jobs:
-        - tripleo-ci-centos-7-scenario001-multinode-oooq-container:
+        - puppet-openstack-lint
+        - puppet-openstack-syntax-4
+        - puppet-openstack-unit-4.8-centos-7
+        - tripleo-ci-centos-7-scenario000-multinode-oooq-container-updates:
             files:
               - ^manifests/haproxy.*$
               - ^manifests/profile/(base|pacemaker)/aodh.*$
@@ -69,50 +95,3 @@
               - ^manifests/profile/(base|pacemaker)/metrics.*$
               - ^manifests/profile/(base|pacemaker)/monitoring.*$
               - ^manifests/profile/(base|pacemaker)/panko.*$
-        - tripleo-ci-centos-7-scenario002-multinode-oooq-container:
-            files:
-              - ^manifests/haproxy.*$
-              - ^manifests/profile/(base|pacemaker)/aodh.*$
-              - ^manifests/profile/(base|pacemaker)/barbican.*$
-              - ^manifests/profile/(base|pacemaker)/ceilometer.*$
-              - ^manifests/profile/(base|pacemaker)/cinder.*$
-              - ^manifests/profile/(base|pacemaker)/glance.*$
-              - ^manifests/profile/(base|pacemaker)/gnocchi.*$
-              - ^manifests/profile/(base|pacemaker)/nova/ec2.*$
-              - ^manifests/profile/(base|pacemaker)/panko.*$
-              - ^manifests/profile/(base|pacemaker)/swift.*$
-              - ^manifests/profile/(base|pacemaker)/zaqar.*$
-        - tripleo-ci-centos-7-scenario003-multinode-oooq-container:
-            files:
-              - ^manifests/haproxy.*$
-              - ^manifests/profile/(base|pacemaker)/glance.*$
-              - ^manifests/profile/(base|pacemaker)/mistral.*$
-              - ^manifests/profile/(base|pacemaker)/sahara.*$
-        - tripleo-ci-centos-7-scenario004-multinode-oooq-container:
-            files:
-              - ^manifests/haproxy.*$
-              - ^manifests/profile/(base|pacemaker)/ceph.*$
-              - ^manifests/profile/(base|pacemaker)/glance.*$
-              - ^manifests/profile/(base|pacemaker)/manila.*$
-        - tripleo-ci-centos-7-scenario007-multinode-oooq-container:
-            files:
-              - ^manifests/profile/pacemaker/ovn.*$
-              - ^manifests/profile/(base|pacemaker)/neutron/plugins/ml2/ovn.*$
-              - ^manifests/profile/(base|pacemaker)/neutron/agents/ovn.*$
-              - ^manifests/profile/(base|pacemaker)/neutron/ovn.*$
-              - ^manifests/profile/(base|pacemaker)/congress.*$
-              - ^manifests/profile/(base|pacemaker)/tacker.*$
-    experimental:
-      jobs:
-        - tripleo-ci-centos-7-scenario005-multinode-oooq:
-            files:
-              - ^manifests/haproxy.*$
-              - ^manifests/pacemaker/.*$
-              - ^manifests/profile/pacemaker.*$
-              - manifests/profile/(base|pacemaker)/pacemaker.pp
-        - tripleo-ci-centos-7-scenario008-multinode-oooq:
-            files:
-              - manifests/profile/(base|pacemaker)/neutron/opendaylight.pp
-              - manifests/profile/(base|pacemaker)/neutron/plugins/ml2/opendaylight.pp
-              - manifests/profile/(base|pacemaker)/neutron/plugins/ovs/opendaylight.pp
-              - ^manifests/profile/(base|pacemaker)/neutron/opendaylight/.*$

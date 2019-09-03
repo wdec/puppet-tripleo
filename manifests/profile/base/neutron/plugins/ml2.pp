@@ -20,11 +20,18 @@
 #
 # [*bootstrap_node*]
 #   (Optional) The hostname of the node responsible for bootstrapping tasks
-#   Defaults to hiera('bootstrap_nodeid')
+#   Defaults to hiera('neutron_plugin_ml2_short_bootstrap_node_name')
 #
 # [*mechanism_drivers*]
 #   (Optional) The mechanism drivers to use with the Ml2 plugin
 #   Defaults to hiera('neutron::plugins::ml2::mechanism_drivers')
+#
+# [*service_names*]
+#   (Optional) List of services enabled on the current role.
+#   We may not want to configure a ml2 plugin for a role,
+#   in spite of the fact that it is in the the drivers list.
+#   Check if the required service is enabled from the service list.
+#   Defaults to hiera('service_names')
 #
 # [*step*]
 #   (Optional) The current step in deployment. See tripleo-heat-templates
@@ -32,8 +39,9 @@
 #   Defaults to hiera('step')
 #
 class tripleo::profile::base::neutron::plugins::ml2 (
-  $bootstrap_node    = hiera('bootstrap_nodeid', undef),
+  $bootstrap_node    = hiera('neutron_plugin_ml2_short_bootstrap_node_name', undef),
   $mechanism_drivers = hiera('neutron::plugins::ml2::mechanism_drivers'),
+  $service_names     = hiera('service_names'),
   $step              = Integer(hiera('step')),
 ) {
   if $::hostname == downcase($bootstrap_node) {
@@ -92,6 +100,10 @@ class tripleo::profile::base::neutron::plugins::ml2 (
 
     if 'cisco_vts' in $mechanism_drivers {
       include ::tripleo::profile::base::neutron::plugins::ml2::vts
+    }
+
+    if ('ansible' in $mechanism_drivers) and ('neutron_plugin_ml2_ansible' in $service_names) {
+      include ::tripleo::profile::base::neutron::plugins::ml2::networking_ansible
     }
   }
 }

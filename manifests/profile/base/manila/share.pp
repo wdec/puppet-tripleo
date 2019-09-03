@@ -104,15 +104,28 @@ class tripleo::profile::base::manila::share (
         # set to 'CEPHFS' or 'NFS'
         $manila_cephfs_backend = hiera('manila::backend::cephfs::title')
         $cephfs_auth_id = hiera('manila::backend::cephfs::cephfs_auth_id')
+        $cephfs_ganesha_server_ip = hiera('manila::backend::cephfs::cephfs_ganesha_server_ip', undef)
+
+        if $cephfs_ganesha_server_ip == undef {
+          $cephfs_ganesha_server_ip_real = hiera('ganesha_vip', undef)
+        } else {
+          $cephfs_ganesha_server_ip_real = $cephfs_ganesha_server_ip
+        }
+
         manila::backend::cephfs { $manila_cephfs_backend :
-          driver_handles_share_servers => hiera('manila::backend::cephfs::driver_handles_share_servers', false),
-          share_backend_name           => hiera('manila::backend::cephfs::share_backend_name'),
-          cephfs_conf_path             => hiera('manila::backend::cephfs::cephfs_conf_path'),
-          cephfs_auth_id               => $cephfs_auth_id,
-          cephfs_cluster_name          => hiera('manila::backend::cephfs::cephfs_cluster_name'),
-          cephfs_enable_snapshots      => hiera('manila::backend::cephfs::cephfs_enable_snapshots'),
-          cephfs_protocol_helper_type  => $manila_cephfs_protocol_helper_type,
-          cephfs_ganesha_server_ip     => hiera('ganesha_vip', undef),
+          driver_handles_share_servers       => hiera('manila::backend::cephfs::driver_handles_share_servers', false),
+          share_backend_name                 => hiera('manila::backend::cephfs::share_backend_name'),
+          cephfs_conf_path                   => hiera('manila::backend::cephfs::cephfs_conf_path'),
+          cephfs_auth_id                     => $cephfs_auth_id,
+          cephfs_cluster_name                => hiera('manila::backend::cephfs::cephfs_cluster_name'),
+          cephfs_enable_snapshots            => hiera('manila::backend::cephfs::cephfs_enable_snapshots'),
+          cephfs_volume_mode                 => hiera('manila::backend::cephfs::cephfs_volume_mode', '0755'),
+          cephfs_protocol_helper_type        => $manila_cephfs_protocol_helper_type,
+          cephfs_ganesha_server_ip           => $cephfs_ganesha_server_ip_real,
+          cephfs_ganesha_server_is_remote    => hiera('manila::backend::cephfs::cephfs_ganesha_server_is_remote', false),
+          cephfs_ganesha_server_username     => hiera('manila::backend::cephfs::cephfs_ganesha_server_username', undef),
+          cephfs_ganesha_server_password     => hiera('manila::backend::cephfs::cephfs_ganesha_server_password', undef),
+          cephfs_ganesha_path_to_private_key => hiera('manila::backend::cephfs::cephfs_ganesha_path_to_private_key', undef),
         }
         if $manila_cephfs_protocol_helper_type == 'NFS' {
           manila_config {
@@ -146,6 +159,11 @@ class tripleo::profile::base::manila::share (
         path    => ['/bin', '/usr/bin' ],
         command => "setfacl -m u:manila:r-- ${keyring_path}",
         unless  => "getfacl ${keyring_path} | grep -q user:manila:r--",
+      }
+      -> exec{ "exec-setfacl-${cephfs_auth_id}-mask":
+        path    => ['/bin', '/usr/bin' ],
+        command => "setfacl -m m::r ${keyring_path}",
+        unless  => "getfacl ${keyring_path} | grep -q mask::r",
       }
       Ceph::Key<| title == "client.${cephfs_auth_id}" |> -> Exec["exec-setfacl-${cephfs_auth_id}"]
     }
@@ -182,7 +200,6 @@ class tripleo::profile::base::manila::share (
         emc_nas_password             => hiera('manila::backend::dellemc_vmax::emc_nas_password'),
         emc_nas_server               => hiera('manila::backend::dellemc_vmax::emc_nas_server'),
         emc_share_backend            => hiera('manila::backend::dellemc_vmax::emc_share_backend','vmax'),
-        share_backend_name           => hiera('manila::backend::dellemc_vmax::share_backend_name'),
         vmax_server_container        => hiera('manila::backend::dellemc_vmax::vmax_server_container'),
         vmax_share_data_pools        => hiera('manila::backend::dellemc_vmax::vmax_share_data_pools'),
         vmax_ethernet_ports          => hiera('manila::backend::dellemc_vmax::vmax_ethernet_ports'),
@@ -197,10 +214,12 @@ class tripleo::profile::base::manila::share (
         emc_nas_password             => hiera('manila::backend::dellemc_unity::emc_nas_password'),
         emc_nas_server               => hiera('manila::backend::dellemc_unity::emc_nas_server'),
         emc_share_backend            => hiera('manila::backend::dellemc_unity::emc_share_backend','unity'),
-        share_backend_name           => hiera('manila::backend::dellemc_unity::share_backend_name'),
         unity_server_meta_pool       => hiera('manila::backend::dellemc_unity::unity_server_meta_pool'),
         unity_share_data_pools       => hiera('manila::backend::dellemc_unity::unity_share_data_pools'),
         unity_ethernet_ports         => hiera('manila::backend::dellemc_unity::unity_ethernet_ports'),
+        network_plugin_ipv6_enabled  => hiera('manila::backend::dellemc_unity::network_plugin_ipv6_enabled'),
+        emc_ssl_cert_verify          => hiera('manila::backend::dellemc_unity::emc_ssl_cert_verify'),
+        emc_ssl_cert_path            => hiera('manila::backend::dellemc_unity::emc_ssl_cert_path'),
       }
     }
     # manila vnx:
@@ -212,10 +231,12 @@ class tripleo::profile::base::manila::share (
         emc_nas_password             => hiera('manila::backend::dellemc_vnx::emc_nas_password'),
         emc_nas_server               => hiera('manila::backend::dellemc_vnx::emc_nas_server'),
         emc_share_backend            => hiera('manila::backend::dellemc_vnx::emc_share_backend','vnx'),
-        share_backend_name           => hiera('manila::backend::dellemc_vnx::share_backend_name'),
         vnx_server_container         => hiera('manila::backend::dellemc_vnx::vnx_server_container'),
         vnx_share_data_pools         => hiera('manila::backend::dellemc_vnx::vnx_share_data_pools'),
         vnx_ethernet_ports           => hiera('manila::backend::dellemc_vnx::vnx_ethernet_ports'),
+        network_plugin_ipv6_enabled  => hiera('manila::backend::dellemc_vnx::network_plugin_ipv6_enabled'),
+        emc_ssl_cert_verify          => hiera('manila::backend::dellemc_vnx::emc_ssl_cert_verify'),
+        emc_ssl_cert_path            => hiera('manila::backend::dellemc_vnx::emc_ssl_cert_path'),
       }
     }
 
@@ -230,7 +251,6 @@ class tripleo::profile::base::manila::share (
         emc_nas_password             => hiera('manila::backend::dellemc_isilon::emc_nas_password'),
         emc_nas_server               => hiera('manila::backend::dellemc_isilon::emc_nas_server'),
         emc_share_backend            => hiera('manila::backend::dellemc_isilon::emc_share_backend','isilon'),
-        share_backend_name           => hiera('manila::backend::dellemc_isilon::share_backend_name'),
         emc_nas_root_dir             => hiera('manila::backend::dellemc_isilon::emc_nas_root_dir'),
         emc_nas_server_port          => hiera('manila::backend::dellemc_isilon::emc_server_port'),
         emc_nas_server_secure        => hiera('manila::backend::dellemc_isilon::emc_nas_secure'),

@@ -49,6 +49,10 @@
 #  The IPv4, IPv6 or filesystem socket path of the syslog server.
 #  Defaults to '/dev/log'
 #
+# [*haproxy_log_facility*]
+#  The syslog facility for HAProxy.
+#  Defaults to 'local0'
+#
 # [*activate_httplog*]
 #  Globally activate "httplog" option (in defaults section)
 #  In case the listener is NOT set to "http" mode, HAProxy will fallback to "tcplog".
@@ -107,6 +111,12 @@
 #  Password for haproxy stats authentication.  When set, authentication is
 #  enabled on the haproxy stats endpoint.
 #  A string.
+#  Defaults to undef
+#
+# [*haproxy_stats_bind_address*]
+#  Bind address for where the haproxy stats web interface should listen on in addition
+#  to the controller_virtual_ip
+#  A string.or an array
 #  Defaults to undef
 #
 # [*service_certificate*]
@@ -418,6 +428,15 @@
 #  (optional) Specify the network keystone_public is running on.
 #  Defaults to hiera('keystone_network', undef)
 #
+# [*keystone_sticky_sessions*]
+#  (optional) Use cookie-based session persistence for the Keystone
+#  public API.
+#  Defaults to hiera('keystone_sticky_sessions', false)
+#
+# [*keystone_session_cookie*]
+#  (optional) Use a specified name for the Keystone sticky session cookie.
+#  Defaults to hiera('keystone_session_cookie', 'KEYSTONESESSION')
+#
 # [*manila_network*]
 #  (optional) Specify the network manila is running on.
 #  Defaults to hiera('manila_api_network', undef)
@@ -572,6 +591,7 @@ class tripleo::haproxy (
   $haproxy_listen_bind_param   = [ 'transparent' ],
   $haproxy_member_options      = [ 'check', 'inter 2000', 'rise 2', 'fall 5' ],
   $haproxy_log_address         = '/dev/log',
+  $haproxy_log_facility        = 'local0',
   $activate_httplog            = false,
   $haproxy_globals_override    = {},
   $haproxy_defaults_override   = {},
@@ -579,6 +599,7 @@ class tripleo::haproxy (
   $haproxy_socket_access_level = 'user',
   $haproxy_stats_user          = 'admin',
   $haproxy_stats_password      = undef,
+  $haproxy_stats_bind_address  = undef,
   $manage_firewall             = hiera('tripleo::firewall::manage_firewall', true),
   $controller_hosts            = hiera('controller_node_ips'),
   $controller_hosts_names      = hiera('controller_node_names', undef),
@@ -654,6 +675,8 @@ class tripleo::haproxy (
   $kubernetes_master_network    = hiera('kubernetes_master_network', undef),
   $keystone_admin_network      = hiera('keystone_admin_api_network', undef),
   $keystone_public_network     = hiera('keystone_public_api_network', undef),
+  $keystone_sticky_sessions    = hiera('keystone_sticky_sessions', false),
+  $keystone_session_cookie     = hiera('keystone_session_cookie,', 'KEYSTONESESSION'),
   $manila_network              = hiera('manila_api_network', undef),
   $mistral_network             = hiera('mistral_api_network', undef),
   $neutron_network             = hiera('neutron_api_network', undef),
@@ -790,7 +813,7 @@ class tripleo::haproxy (
   }
 
   $haproxy_global_options = {
-    'log'                      => "${haproxy_log_address} local0",
+    'log'                      => "${haproxy_log_address} ${haproxy_log_facility}",
     'pidfile'                  => '/var/run/haproxy.pid',
     'user'                     => 'haproxy',
     'group'                    => 'haproxy',
@@ -858,9 +881,12 @@ class tripleo::haproxy (
     } else {
       $haproxy_stats_certificate_real = undef
     }
+    $haproxy_stats_ips_raw = union(any2array($controller_virtual_ip), any2array($haproxy_stats_bind_address))
+    $haproxy_stats_ips = delete_undef_values($haproxy_stats_ips_raw)
+
     class { '::tripleo::haproxy::stats':
       haproxy_listen_bind_param => $haproxy_listen_bind_param,
-      ip                        => $controller_virtual_ip,
+      ip                        => $haproxy_stats_ips,
       password                  => $haproxy_stats_password,
       certificate               => $haproxy_stats_certificate_real,
       user                      => $haproxy_stats_user,
@@ -894,6 +920,8 @@ class tripleo::haproxy (
       listen_options    => merge($default_listen_options, $keystone_listen_opts),
       public_ssl_port   => $ports[keystone_public_api_ssl_port],
       service_network   => $keystone_public_network,
+      sticky_sessions   => $keystone_sticky_sessions,
+      session_cookie    => $keystone_session_cookie,
       member_options    => union($haproxy_member_options, $internal_tls_member_options),
     }
   }
@@ -949,6 +977,7 @@ class tripleo::haproxy (
       mode              => 'http',
       public_ssl_port   => $ports[manila_api_ssl_port],
       service_network   => $manila_network,
+      member_options    => union($haproxy_member_options, $internal_tls_member_options),
     }
   }
 
@@ -1046,6 +1075,14 @@ class tripleo::haproxy (
   }
 
   if $nova_novncproxy {
+    if $enable_internal_tls {
+      # we need to make sure we use ssl for checks.
+      $haproxy_member_options_real   = delete($haproxy_member_options, 'check')
+      $novncproxy_ssl_member_options = ['check-ssl']
+    } else {
+      $haproxy_member_options_real   = $haproxy_member_options
+      $novncproxy_ssl_member_options = []
+    }
     ::tripleo::haproxy::endpoint { 'nova_novncproxy':
       public_virtual_ip => $public_virtual_ip,
       internal_ip       => $nova_api_vip,
@@ -1059,6 +1096,7 @@ class tripleo::haproxy (
       }),
       public_ssl_port   => $ports[nova_novnc_ssl_port],
       service_network   => $nova_novncproxy_network,
+      member_options    => union($haproxy_member_options_real, $internal_tls_member_options, $novncproxy_ssl_member_options),
     }
   }
 
@@ -1232,6 +1270,7 @@ class tripleo::haproxy (
       use_internal_certificates   => $use_internal_certificates,
       internal_certificates_specs => $internal_certificates_specs,
       service_network             => $horizon_network,
+      manage_firewall             => $manage_firewall,
     }
   }
 
@@ -1244,6 +1283,7 @@ class tripleo::haproxy (
       server_names      => hiera('ironic_api_node_names', $controller_hosts_names_real),
       public_ssl_port   => $ports[ironic_api_ssl_port],
       service_network   => $ironic_network,
+      member_options    => union($haproxy_member_options, $internal_tls_member_options),
     }
   }
 
@@ -1357,10 +1397,10 @@ class tripleo::haproxy (
 
   if $redis {
     if $enable_internal_tls {
-      $redis_tcp_check_ssl_options = ['connect ssl']
+      $redis_tcp_check_ssl_options = ['connect port 6379 ssl']
       $redis_ssl_member_options = ['check-ssl', "ca-file ${ca_bundle}"]
     } else {
-      $redis_tcp_check_ssl_options = []
+      $redis_tcp_check_ssl_options = ['connect port 6379']
       $redis_ssl_member_options = []
     }
     if $redis_password {
@@ -1458,7 +1498,7 @@ class tripleo::haproxy (
       member_options  => union($haproxy_member_options, $internal_tls_member_options),
       service_network => $opendaylight_network,
       listen_options  => merge($default_listen_options,
-        { 'option' => [ 'httpchk GET /controller/nb/v2/neutron', 'httplog' ] }),
+        { 'option' => [ 'httpchk GET /diagstatus', 'httplog' ] }),
     }
 
     ::tripleo::haproxy::endpoint { 'opendaylight_ws':
@@ -1489,6 +1529,8 @@ class tripleo::haproxy (
       server_names      => hiera('octavia_api_node_names'),
       public_ssl_port   => $ports[octavia_api_ssl_port],
       service_network   => $octavia_network,
+      mode              => 'http',
+      member_options    => union($haproxy_member_options, $internal_tls_member_options),
     }
   }
 
